@@ -106,7 +106,7 @@ def _build_messages_from_canvas(dbc_file: str | None, canvas_nodes: list[dict]) 
                     "start_bit": int(meta.get("start_bit", node.get("start_bit", 0))),
                     "length": int(meta.get("length", node.get("length", 0))),
                 }
-            signal_entry["canvas"] = _canvas_info_for_node(node)
+            signal_entry["canvas"] = _canvas_info_for_node(node, dbc_messages)
             signals_out.append(signal_entry)
 
         message_entry["signals"] = signals_out
@@ -217,7 +217,7 @@ def _signal_attrs_from_dbc(signal) -> dict:
     return data
 
 
-def _canvas_info_for_node(node: dict) -> dict:
+def _canvas_info_for_node(node: dict, dbc_messages: dict) -> dict:
     info: dict = {
         "id": str(node.get("id", "") or ""),
         "node": node.get("node", ""),
@@ -227,8 +227,54 @@ def _canvas_info_for_node(node: dict) -> dict:
     }
     condition = node.get("condition")
     if condition:
-        info["condition"] = dict(condition)
+        info["condition"] = _enrich_condition(condition, dbc_messages)
     return info
+
+
+def _enrich_condition(condition: dict, dbc_messages: dict) -> dict:
+    """Enrich a condition dict with full DBC attributes of the source signal."""
+    result = dict(condition)
+
+    source_message_name = condition.get("source_message", "")
+    source_signal_name = condition.get("source_signal", "")
+
+    db_message = dbc_messages.get(source_message_name)
+    if db_message is not None:
+        # Add source message info
+        result["source_frame_id"] = int(db_message.frame_id)
+        result["source_frame_id_hex"] = f"0x{int(db_message.frame_id):X}"
+        result["source_message_length"] = _safe_int(getattr(db_message, "length", None))
+        result["source_is_extended_frame"] = bool(getattr(db_message, "is_extended_frame", False))
+        result["source_is_fd"] = bool(getattr(db_message, "is_fd", False))
+        result["source_senders"] = list(getattr(db_message, "senders", None) or [])
+        result["source_cycle_time_ms"] = _safe_int(getattr(db_message, "cycle_time", None))
+        result["source_send_type"] = getattr(db_message, "send_type", None)
+        result["source_comment"] = getattr(db_message, "comment", None)
+
+        # Add full source signal info
+        db_signal = None
+        for sig in db_message.signals:
+            if sig.name == source_signal_name:
+                db_signal = sig
+                break
+
+        if db_signal is not None:
+            result["source_signal_info"] = _signal_attrs_from_dbc(db_signal)
+        else:
+            result["source_signal_info"] = {
+                "name": source_signal_name,
+                "start_bit": int(condition.get("start_bit", 0)),
+                "length": int(condition.get("length", 0)),
+            }
+    else:
+        # No DBC data available; include whatever we have from the condition
+        result["source_signal_info"] = {
+            "name": source_signal_name,
+            "start_bit": int(condition.get("start_bit", 0)),
+            "length": int(condition.get("length", 0)),
+        }
+
+    return result
 
 
 def _to_number(value):
