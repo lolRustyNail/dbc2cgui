@@ -133,6 +133,16 @@ def _load_dbc_messages(dbc_file: str | None) -> dict:
 
 
 def _message_attrs_from_dbc(message) -> dict:
+    signal_groups = getattr(message, "signal_groups", None)
+    if signal_groups:
+        signal_groups = [
+            {"name": sg.name, "repetitions": getattr(sg, "repetitions", None),
+             "signal_names": list(getattr(sg, "signal_names", []))}
+            for sg in signal_groups
+        ]
+    else:
+        signal_groups = []
+
     data: dict = {
         "name": message.name,
         "frame_id": int(message.frame_id),
@@ -140,10 +150,20 @@ def _message_attrs_from_dbc(message) -> dict:
         "length": _safe_int(getattr(message, "length", None)),
         "is_extended_frame": bool(getattr(message, "is_extended_frame", False)),
         "is_fd": bool(getattr(message, "is_fd", False)),
+        "is_multiplexed": bool(getattr(message, "is_multiplexed", False)),
+        "is_container": bool(getattr(message, "is_container", False)),
+        "bus_name": getattr(message, "bus_name", None),
+        "protocol": getattr(message, "protocol", None),
+        "header_byte_order": getattr(message, "header_byte_order", None),
+        "header_id": getattr(message, "header_id", None),
         "senders": list(getattr(message, "senders", None) or []),
+        "receivers": sorted(getattr(message, "receivers", None) or []),
         "cycle_time_ms": _safe_int(getattr(message, "cycle_time", None)),
         "send_type": getattr(message, "send_type", None),
+        "signal_groups": signal_groups,
+        "unused_bit_pattern": _safe_int(getattr(message, "unused_bit_pattern", None)),
         "comment": getattr(message, "comment", None),
+        "comments": _normalize_comments(getattr(message, "comments", None)),
     }
     return data
 
@@ -156,6 +176,16 @@ def _signal_attrs_from_dbc(signal) -> dict:
     mux_ids = getattr(signal, "multiplexer_ids", None)
     if mux_ids is not None:
         mux_ids = list(mux_ids)
+
+    conversion = getattr(signal, "conversion", None)
+    conversion_info = None
+    if conversion is not None:
+        conversion_info = {
+            "type": type(conversion).__name__,
+            "scale": _to_number(getattr(conversion, "scale", None)),
+            "offset": _to_number(getattr(conversion, "offset", None)),
+            "is_float": bool(getattr(conversion, "is_float", False)),
+        }
 
     data: dict = {
         "name": signal.name,
@@ -170,12 +200,19 @@ def _signal_attrs_from_dbc(signal) -> dict:
         "maximum": _to_number(getattr(signal, "maximum", None)),
         "unit": getattr(signal, "unit", None),
         "initial": _to_number(getattr(signal, "initial", None)),
+        "raw_initial": _to_number(getattr(signal, "raw_initial", None)),
+        "invalid": _to_number(getattr(signal, "invalid", None)),
+        "raw_invalid": _to_number(getattr(signal, "raw_invalid", None)),
         "receivers": list(getattr(signal, "receivers", None) or []),
         "is_multiplexer": bool(getattr(signal, "is_multiplexer", False)),
         "multiplexer_ids": mux_ids,
+        "multiplexer_signal": getattr(signal, "multiplexer_signal", None),
         "mux_indicator": getattr(signal, "mux_indicator", None),
+        "spn": _safe_int(getattr(signal, "spn", None)),
         "choices": choices,
+        "conversion": conversion_info,
         "comment": getattr(signal, "comment", None),
+        "comments": _normalize_comments(getattr(signal, "comments", None)),
     }
     return data
 
@@ -201,6 +238,23 @@ def _to_number(value):
         except (TypeError, ValueError):
             return str(value)
     return value
+
+
+def _normalize_comments(comments):
+    """Convert cantools comments dict to a plain dict with string keys.
+
+    cantools uses None as the key for the default comment; we map it
+    to the empty string so the JSON output is not confusing.
+    """
+    if comments is None:
+        return None
+    if isinstance(comments, dict):
+        out = {}
+        for k, v in comments.items():
+            key = "" if k is None else str(k)
+            out[key] = str(v)
+        return out
+    return str(comments)
 
 
 def _safe_int(value):
