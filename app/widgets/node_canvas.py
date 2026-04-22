@@ -32,6 +32,7 @@ class NodeCanvasView(QGraphicsView):
         self._suppress_history = False
         self._move_snapshot: dict | None = None
         self._move_start_positions: dict[str, tuple[float, float]] = {}
+        self._condition_links: list[ConditionLinkItem] = []
         self._scene.setSceneRect(-2000, -2000, 4000, 4000)
         self.setScene(self._scene)
         self.setAcceptDrops(True)
@@ -115,6 +116,7 @@ class NodeCanvasView(QGraphicsView):
         self.clear_history()
 
     def clear_canvas(self) -> None:
+        self._condition_links.clear()
         self._scene.clear()
 
     def export_nodes(self) -> list[dict]:
@@ -350,6 +352,7 @@ class NodeCanvasView(QGraphicsView):
 
         link = ConditionLinkItem(source_item, target_item, condition, on_edit=self._edit_item_condition)
         self._scene.addItem(link)
+        self._condition_links.append(link)
         self._update_condition_links()
 
     def _hide_condition_dependency(self, target_item: SignalNodeItem) -> None:
@@ -360,6 +363,8 @@ class NodeCanvasView(QGraphicsView):
         with self._batch_history():
             source_item = link.source_item
             self._scene.removeItem(link)
+            if link in self._condition_links:
+                self._condition_links.remove(link)
             if source_item.is_reference() and not self._has_links_for_item(source_item):
                 self._scene.removeItem(source_item)
 
@@ -483,6 +488,8 @@ class NodeCanvasView(QGraphicsView):
                 if scene_item.source_item is item or scene_item.target_item is item:
                     source_item = scene_item.source_item
                     self._scene.removeItem(scene_item)
+                    if scene_item in self._condition_links:
+                        self._condition_links.remove(scene_item)
                     if source_item is not item and source_item.is_reference() and not self._has_links_for_item(source_item):
                         self._scene.removeItem(source_item)
             self._scene.removeItem(item)
@@ -539,6 +546,7 @@ class NodeCanvasView(QGraphicsView):
     def _restore_state(self, state: dict) -> None:
         self._suppress_history = True
         try:
+            self._condition_links.clear()
             self._scene.clear()
             id_map: dict[str, SignalNodeItem] = {}
             for node in state["nodes"]:
@@ -555,6 +563,7 @@ class NodeCanvasView(QGraphicsView):
                     source, target, link["condition"], on_edit=self._edit_item_condition
                 )
                 self._scene.addItem(link_item)
+                self._condition_links.append(link_item)
             self._update_condition_links()
         finally:
             self._suppress_history = False

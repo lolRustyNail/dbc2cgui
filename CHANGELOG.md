@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### Changed
+- **画布 JSON 导出结构升级到 v2(message 分组 + 完整 DBC 属性)**:
+  - 顶层字段:`version`、`dbc_file`、`messages`。
+  - 相同 `message` 下的信号现在聚合到同一条 `messages[*].signals` 数组里。
+  - 每条 message 输出:`name`、`frame_id`、`frame_id_hex`、`length`、`is_extended_frame`、`is_fd`、`senders`、`cycle_time_ms`、`send_type`、`comment`。
+  - 每条 signal 输出:`name`、`start_bit`、`length`、`byte_order`、`is_signed`、`is_float`、`factor`、`offset`、`minimum`、`maximum`、`unit`、`initial`、`receivers`、`is_multiplexer`、`multiplexer_ids`、`mux_indicator`、`choices`、`comment`。
+  - 每条 signal 追加 `canvas` 子字段,保存该节点在画布上的 `id / node / direction / x / y / condition`。
+  - 目的:导出的 JSON 为自包含文档,后续代码生成**只用此 JSON 即可**,无需再读原始 `.dbc`。
+- **向后兼容**:仍可载入旧版(v1,`{dbc_file, nodes: [...]}`)格式的画布文件。
+
 ### Added
 - **Info 菜单**:新增 `Info` 菜单项,包含 `Changelog` 可查看本文件内容。
 - **撤销 / 重做**:

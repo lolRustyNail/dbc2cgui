@@ -1,16 +1,33 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 
+SCHEMA_VERSION = 2
 
-def export_canvas_json(file_path: str, dbc_file: str | None, nodes: list[dict]) -> None:
+
+def export_canvas_json(
+    file_path: str,
+    dbc_file: str | None,
+    nodes: list[dict],
+) -> None:
+    """Export the canvas state as a self-contained JSON document.
+
+    Nodes sharing the same message are grouped under that message, and every
+    signal entry carries the full set of DBC attributes (byte order, factor,
+    offset, unit, choices, receivers, comment, etc.) when a DBC file is
+    available, so that downstream code generation can consume the JSON alone
+    without re-reading the original .dbc file.
+    """
+    messages = _build_messages_from_canvas(dbc_file, nodes)
     payload = {
+        "version": SCHEMA_VERSION,
         "dbc_file": dbc_file,
-        "nodes": nodes,
+        "messages": messages,
     }
     Path(file_path).write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False),
+        json.dumps(payload, indent=2, ensure_ascii=False, default=_json_default),
         encoding="utf-8",
     )
 
@@ -20,25 +37,242 @@ def load_canvas_json(file_path: str) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Canvas JSON root must be an object.")
 
-    nodes = payload.get("nodes", [])
-    if not isinstance(nodes, list):
-        raise ValueError("Canvas JSON field 'nodes' must be a list.")
-
-    normalized_nodes = []
-    for index, node in enumerate(nodes, start=1):
-        normalized_nodes.append(_normalize_node(node, index))
-
     dbc_file = payload.get("dbc_file")
     if dbc_file is not None and not isinstance(dbc_file, str):
         raise ValueError("Canvas JSON field 'dbc_file' must be a string or null.")
 
+    # Accept both the new message-grouped schema (v2+) and the legacy flat
+    # "nodes" schema (v1) so older canvas files keep working.
+    if "messages" in payload:
+        nodes = _flatten_messages(payload.get("messages", []))
+    else:
+        raw_nodes = payload.get("nodes", [])
+        if not isinstance(raw_nodes, list):
+            raise ValueError("Canvas JSON field 'nodes' must be a list.")
+        nodes = [_normalize_node(node, idx) for idx, node in enumerate(raw_nodes, start=1)]
+
     return {
         "dbc_file": dbc_file,
-        "nodes": normalized_nodes,
+        "nodes": nodes,
     }
 
 
+# ---------------------------------------------------------------------------
+# Export helpers
+# ---------------------------------------------------------------------------
+
+def _build_messages_from_canvas(dbc_file: str | None, canvas_nodes: list[dict]) -> list[dict]:
+    groups: dict[str, list[dict]] = {}
+    order: list[str] = []
+    for node in canvas_nodes:
+        message_name = node.get("message", "")
+        if not message_name:
+            continue
+        if message_name not in groups:
+            order.append(message_name)
+            groups[message_name] = []
+        groups[message_name].append(node)
+
+    dbc_messages = _load_dbc_messages(dbc_file)
+
+    messages: list[dict] = []
+    for name in order:
+        canvas_items = groups[name]
+        db_message = dbc_messages.get(name)
+
+        if db_message is not None:
+            message_entry = _message_attrs_from_dbc(db_message)
+            db_signals = {s.name: s for s in db_message.signals}
+        else:
+            first = canvas_items[0]
+            frame_id = int(first.get("meta", {}).get("frame_id", first.get("frame_id", 0)))
+            message_entry = {
+                "name": name,
+                "frame_id": frame_id,
+                "frame_id_hex": f"0x{frame_id:X}",
+            }
+            db_signals = {}
+
+        signals_out: list[dict] = []
+        for node in canvas_items:
+            signal_name = node.get("signal", "")
+            db_signal = db_signals.get(signal_name)
+            if db_signal is not None:
+                signal_entry = _signal_attrs_from_dbc(db_signal)
+            else:
+                meta = node.get("meta", {})
+                signal_entry = {
+                    "name": signal_name,
+                    "start_bit": int(meta.get("start_bit", node.get("start_bit", 0))),
+                    "length": int(meta.get("length", node.get("length", 0))),
+                }
+            signal_entry["canvas"] = _canvas_info_for_node(node)
+            signals_out.append(signal_entry)
+
+        message_entry["signals"] = signals_out
+        messages.append(message_entry)
+
+    return messages
+
+
+def _load_dbc_messages(dbc_file: str | None) -> dict:
+    if not dbc_file:
+        return {}
+    path = Path(dbc_file)
+    if not path.exists():
+        return {}
+    try:
+        import cantools  # local import to avoid hard dependency at module import time
+    except ImportError:
+        return {}
+    try:
+        database = cantools.database.load_file(str(path))
+    except Exception:
+        return {}
+    return {message.name: message for message in getattr(database, "messages", [])}
+
+
+def _message_attrs_from_dbc(message) -> dict:
+    data: dict = {
+        "name": message.name,
+        "frame_id": int(message.frame_id),
+        "frame_id_hex": f"0x{int(message.frame_id):X}",
+        "length": _safe_int(getattr(message, "length", None)),
+        "is_extended_frame": bool(getattr(message, "is_extended_frame", False)),
+        "is_fd": bool(getattr(message, "is_fd", False)),
+        "senders": list(getattr(message, "senders", None) or []),
+        "cycle_time_ms": _safe_int(getattr(message, "cycle_time", None)),
+        "send_type": getattr(message, "send_type", None),
+        "comment": getattr(message, "comment", None),
+    }
+    return data
+
+
+def _signal_attrs_from_dbc(signal) -> dict:
+    choices = getattr(signal, "choices", None) or None
+    if choices:
+        choices = {str(k): str(v) for k, v in choices.items()}
+
+    mux_ids = getattr(signal, "multiplexer_ids", None)
+    if mux_ids is not None:
+        mux_ids = list(mux_ids)
+
+    data: dict = {
+        "name": signal.name,
+        "start_bit": int(getattr(signal, "start", 0)),
+        "length": int(getattr(signal, "length", 0)),
+        "byte_order": getattr(signal, "byte_order", "big_endian"),
+        "is_signed": bool(getattr(signal, "is_signed", False)),
+        "is_float": bool(getattr(signal, "is_float", False)),
+        "factor": _to_number(getattr(signal, "scale", 1)),
+        "offset": _to_number(getattr(signal, "offset", 0)),
+        "minimum": _to_number(getattr(signal, "minimum", None)),
+        "maximum": _to_number(getattr(signal, "maximum", None)),
+        "unit": getattr(signal, "unit", None),
+        "initial": _to_number(getattr(signal, "initial", None)),
+        "receivers": list(getattr(signal, "receivers", None) or []),
+        "is_multiplexer": bool(getattr(signal, "is_multiplexer", False)),
+        "multiplexer_ids": mux_ids,
+        "mux_indicator": getattr(signal, "mux_indicator", None),
+        "choices": choices,
+        "comment": getattr(signal, "comment", None),
+    }
+    return data
+
+
+def _canvas_info_for_node(node: dict) -> dict:
+    info: dict = {
+        "id": str(node.get("id", "") or ""),
+        "node": node.get("node", ""),
+        "direction": node.get("direction", ""),
+        "x": float(node.get("x", 0)),
+        "y": float(node.get("y", 0)),
+    }
+    condition = node.get("condition")
+    if condition:
+        info["condition"] = dict(condition)
+    return info
+
+
+def _to_number(value):
+    if isinstance(value, Decimal):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return str(value)
+    return value
+
+
+def _safe_int(value):
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return value
+
+
+def _json_default(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
+# ---------------------------------------------------------------------------
+# Load helpers (schema v2 → flat nodes expected by the canvas)
+# ---------------------------------------------------------------------------
+
+def _flatten_messages(messages: list) -> list[dict]:
+    if not isinstance(messages, list):
+        raise ValueError("Canvas JSON field 'messages' must be a list.")
+
+    flat: list[dict] = []
+    for msg_idx, message in enumerate(messages, start=1):
+        if not isinstance(message, dict):
+            raise ValueError(f"Message #{msg_idx} must be an object.")
+        msg_name = message.get("name")
+        if not isinstance(msg_name, str) or not msg_name:
+            raise ValueError(f"Message #{msg_idx} field 'name' must be a non-empty string.")
+        frame_id = int(message.get("frame_id", 0))
+        signals = message.get("signals", [])
+        if not isinstance(signals, list):
+            raise ValueError(f"Message '{msg_name}' field 'signals' must be a list.")
+
+        for sig_idx, signal in enumerate(signals, start=1):
+            if not isinstance(signal, dict):
+                raise ValueError(f"Signal #{sig_idx} of '{msg_name}' must be an object.")
+            signal_name = signal.get("name")
+            if not isinstance(signal_name, str) or not signal_name:
+                raise ValueError(
+                    f"Signal #{sig_idx} of '{msg_name}' field 'name' must be a non-empty string."
+                )
+            canvas = signal.get("canvas") or {}
+            if not isinstance(canvas, dict):
+                raise ValueError(
+                    f"Signal '{signal_name}' of '{msg_name}' field 'canvas' must be an object."
+                )
+
+            node: dict = {
+                "id": str(canvas.get("id") or ""),
+                "node": canvas.get("node", ""),
+                "direction": canvas.get("direction", "rx"),
+                "message": msg_name,
+                "frame_id": frame_id,
+                "signal": signal_name,
+                "start_bit": int(signal.get("start_bit", 0)),
+                "length": int(signal.get("length", 0)),
+                "x": float(canvas.get("x", 0)),
+                "y": float(canvas.get("y", 0)),
+            }
+            condition = canvas.get("condition")
+            if condition is not None:
+                node["condition"] = _normalize_condition(condition, sig_idx)
+            flat.append(node)
+    return flat
+
+
 def _normalize_node(node: object, index: int) -> dict:
+    """Legacy v1 flat-node normalizer (kept for backward compatibility)."""
     if not isinstance(node, dict):
         raise ValueError(f"Node #{index} must be an object.")
 
@@ -47,7 +281,7 @@ def _normalize_node(node: object, index: int) -> dict:
         raise ValueError(f"Node #{index} field 'meta' must be an object.")
 
     required_fields = ["node", "message", "signal", "direction"]
-    normalized = {}
+    normalized: dict = {}
     for field_name in required_fields:
         value = node.get(field_name)
         if not isinstance(value, str) or not value:
@@ -68,7 +302,7 @@ def _normalize_node(node: object, index: int) -> dict:
 
 def _normalize_condition(condition: object, index: int) -> dict:
     if not isinstance(condition, dict):
-        raise ValueError(f"Node #{index} field 'condition' must be an object.")
+        raise ValueError(f"Condition #{index} must be an object.")
 
     required_fields = [
         "source_node",
@@ -77,10 +311,12 @@ def _normalize_condition(condition: object, index: int) -> dict:
         "operator",
         "value",
     ]
-    normalized = {}
+    normalized: dict = {}
     for field_name in required_fields:
         value = condition.get(field_name)
         if not isinstance(value, str) or not value:
-            raise ValueError(f"Node #{index} condition field '{field_name}' must be a non-empty string.")
+            raise ValueError(
+                f"Condition #{index} field '{field_name}' must be a non-empty string."
+            )
         normalized[field_name] = value
     return normalized
