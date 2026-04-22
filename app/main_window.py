@@ -97,6 +97,11 @@ class MainWindow(QMainWindow):
         self.reset_view_action.setStatusTip("Reset canvas zoom and position")
         self.reset_view_action.triggered.connect(self.node_canvas.reset_view)
 
+        self.convert_action = QAction("Convert", self)
+        self.convert_action.setShortcut(QKeySequence("Ctrl+G"))
+        self.convert_action.setStatusTip("Convert current canvas to code")
+        self.convert_action.triggered.connect(self._convert)
+
         self.changelog_action = QAction("Changelog", self)
         self.changelog_action.setStatusTip("Show the application changelog")
         self.changelog_action.triggered.connect(self.show_changelog)
@@ -111,6 +116,8 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.import_json_action)
         toolbar.addAction(self.export_action)
         toolbar.addAction(self.clear_action)
+        toolbar.addSeparator()
+        toolbar.addAction(self.convert_action)
 
         file_menu = self.menuBar().addMenu("File")
         file_menu.addAction(self.import_action)
@@ -118,6 +125,8 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.export_action)
         file_menu.addSeparator()
         file_menu.addAction(self.clear_action)
+        file_menu.addSeparator()
+        file_menu.addAction(self.convert_action)
 
         edit_menu = self.menuBar().addMenu("Edit")
         edit_menu.addAction(self.undo_action)
@@ -310,6 +319,39 @@ class MainWindow(QMainWindow):
         self.state.current_canvas_file = file_path
         self._update_title()
         self.statusBar().showMessage(f"Exported canvas JSON to {file_path}")
+
+    def _convert(self) -> None:
+        """Convert the current canvas nodes to code.
+
+        This is a stub — fill in the actual conversion logic here.
+        `canvas_data` contains the full message-grouped JSON structure
+        (same as what Export JSON writes to disk).
+        """
+        canvas_data = self._build_canvas_data()
+        if not canvas_data.get("messages"):
+            self.statusBar().showMessage("Nothing to convert — canvas is empty.")
+            return
+        # TODO: implement conversion logic using canvas_data
+        self.statusBar().showMessage(
+            f"Convert: received {len(canvas_data['messages'])} message(s) "
+            f"with {sum(len(m['signals']) for m in canvas_data['messages'])} signal(s). "
+            "(stub — no conversion logic yet)"
+        )
+        print("123")
+
+    def _build_canvas_data(self) -> dict:
+        """Build the full message-grouped canvas data dict (mirrors export JSON)."""
+        from app.json_exporter import _build_messages_from_canvas
+        dbc_file = (
+            self.state.current_document.file_path
+            if self.state.current_document is not None
+            else None
+        )
+        return {
+            "version": 2,
+            "dbc_file": dbc_file,
+            "messages": _build_messages_from_canvas(dbc_file, self.node_canvas.export_nodes()),
+        }
 
     def clear_canvas(self) -> None:
         if self.node_canvas.export_nodes():
