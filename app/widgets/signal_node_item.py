@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 
 class SignalNodeItem(QGraphicsRectItem):
     GRID_SIZE = 24
-    WIDTH = 240
+    WIDTH = 280
     HEIGHT = 162
 
     def __init__(self, signal_data: dict):
