@@ -156,8 +156,8 @@ def _message_attrs_from_dbc(message) -> dict:
         "protocol": getattr(message, "protocol", None),
         "header_byte_order": getattr(message, "header_byte_order", None),
         "header_id": getattr(message, "header_id", None),
-        "senders": list(getattr(message, "senders", None) or []),
-        "receivers": sorted(getattr(message, "receivers", None) or []),
+        "senders": [str(s) for s in (getattr(message, "senders", None) or [])],
+        "receivers": sorted(str(r) for r in (getattr(message, "receivers", None) or [])),
         "cycle_time_ms": _safe_int(getattr(message, "cycle_time", None)),
         "send_type": getattr(message, "send_type", None),
         "signal_groups": signal_groups,
@@ -203,7 +203,7 @@ def _signal_attrs_from_dbc(signal) -> dict:
         "raw_initial": _to_number(getattr(signal, "raw_initial", None)),
         "invalid": _to_number(getattr(signal, "invalid", None)),
         "raw_invalid": _to_number(getattr(signal, "raw_invalid", None)),
-        "receivers": list(getattr(signal, "receivers", None) or []),
+        "receivers": [str(r) for r in (getattr(signal, "receivers", None) or [])],
         "is_multiplexer": bool(getattr(signal, "is_multiplexer", False)),
         "multiplexer_ids": mux_ids,
         "multiplexer_signal": getattr(signal, "multiplexer_signal", None),
@@ -246,7 +246,7 @@ def _enrich_condition(condition: dict, dbc_messages: dict) -> dict:
         result["source_message_length"] = _safe_int(getattr(db_message, "length", None))
         result["source_is_extended_frame"] = bool(getattr(db_message, "is_extended_frame", False))
         result["source_is_fd"] = bool(getattr(db_message, "is_fd", False))
-        result["source_senders"] = list(getattr(db_message, "senders", None) or [])
+        result["source_senders"] = [str(s) for s in (getattr(db_message, "senders", None) or [])]
         result["source_cycle_time_ms"] = _safe_int(getattr(db_message, "cycle_time", None))
         result["source_send_type"] = getattr(db_message, "send_type", None)
         result["source_comment"] = getattr(db_message, "comment", None)
@@ -315,6 +315,9 @@ def _safe_int(value):
 def _json_default(value):
     if isinstance(value, Decimal):
         return float(value)
+    # Handle cantools named-value objects (NamedSignalValue, etc.)
+    if hasattr(value, "__str__"):
+        return str(value)
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
