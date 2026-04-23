@@ -187,11 +187,16 @@ def _signal_attrs_from_dbc(signal) -> dict:
             "is_float": bool(getattr(conversion, "is_float", False)),
         }
 
+    start_bit_msb = int(getattr(signal, "start", 0))
+    byte_order = getattr(signal, "byte_order", "big_endian")
+    sig_length = int(getattr(signal, "length", 0))
+
     data: dict = {
         "name": signal.name,
-        "start_bit": int(getattr(signal, "start", 0)),
-        "length": int(getattr(signal, "length", 0)),
-        "byte_order": getattr(signal, "byte_order", "big_endian"),
+        "start_bit": start_bit_msb,
+        "start_bit_lsb": _msb_to_lsb(start_bit_msb, sig_length, byte_order),
+        "length": sig_length,
+        "byte_order": byte_order,
         "is_signed": bool(getattr(signal, "is_signed", False)),
         "is_float": bool(getattr(signal, "is_float", False)),
         "factor": _to_number(getattr(signal, "scale", 1)),
@@ -275,6 +280,37 @@ def _enrich_condition(condition: dict, dbc_messages: dict) -> dict:
         }
 
     return result
+
+
+def _msb_to_lsb(start_bit_msb: int, length: int, byte_order: str) -> int:
+    """Convert DBC MSB start bit to LSB start bit for Motorola (big-endian) signals.
+
+    In the DBC format, the start_bit for Motorola signals is the MSB position.
+    CANdb++ and most code generators display/expect the LSB position.
+    For Intel (little-endian) signals, start_bit is already the LSB.
+    """
+    if byte_order != "big_endian" or length <= 0:
+        return start_bit_msb
+
+    s_byte = start_bit_msb // 8
+    s_bit = start_bit_msb % 8
+    bits_in_first_byte = s_bit + 1
+
+    if length <= bits_in_first_byte:
+        # Signal fits within one byte
+        return start_bit_msb - length + 1
+
+    remaining = length - bits_in_first_byte
+    full_bytes = remaining // 8
+    last_bits = remaining % 8
+
+    if last_bits == 0:
+        # LSB is bit 0 of the last full byte
+        lsb_byte = s_byte + 1 + full_bytes - 1
+        return lsb_byte * 8
+    else:
+        lsb_byte = s_byte + 1 + full_bytes
+        return lsb_byte * 8 + (8 - last_bits)
 
 
 def _to_number(value):
