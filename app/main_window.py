@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -37,20 +37,12 @@ class MainWindow(QMainWindow):
         self.node_canvas = NodeCanvasView()
 
         self.setWindowTitle("DBC2C")
-
-        screen = QApplication.primaryScreen().availableGeometry()
-        self.resize(
-            int(screen.width() * 0.85),
-            int(screen.height() * 0.85),
-        )
-        self.move(
-            int((screen.width() - self.width()) / 2),
-            int((screen.height() - self.height()) / 2),
-        )
+        self._settings = QSettings("DBC2C", "DBC2C")
 
         self._build_actions()
         self._build_layout()
         self._build_shortcuts()
+        self._restore_window_state()
         self.statusBar().showMessage("Import a DBC file to start building nodes.")
 
     def _build_actions(self) -> None:
@@ -101,6 +93,11 @@ class MainWindow(QMainWindow):
         self.fit_nodes_action.setStatusTip("Fit all canvas nodes into view")
         self.fit_nodes_action.triggered.connect(self.node_canvas.fit_all_nodes)
 
+        self.auto_layout_action = QAction("Auto Layout", self)
+        self.auto_layout_action.setShortcut(QKeySequence("Ctrl+L"))
+        self.auto_layout_action.setStatusTip("Arrange nodes grouped by message")
+        self.auto_layout_action.triggered.connect(self.node_canvas.auto_layout)
+
         self.reset_view_action = QAction("Reset View", self)
         self.reset_view_action.setShortcut(QKeySequence("Ctrl+0"))
         self.reset_view_action.setStatusTip("Reset canvas zoom and position")
@@ -126,6 +123,9 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.export_action)
         toolbar.addAction(self.clear_action)
         toolbar.addSeparator()
+        toolbar.addAction(self.auto_layout_action)
+        toolbar.addAction(self.fit_nodes_action)
+        toolbar.addSeparator()
         toolbar.addAction(self.convert_action)
 
         file_menu = self.menuBar().addMenu("File")
@@ -145,6 +145,7 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(self.duplicate_action)
 
         view_menu = self.menuBar().addMenu("View")
+        view_menu.addAction(self.auto_layout_action)
         view_menu.addAction(self.fit_nodes_action)
         view_menu.addAction(self.reset_view_action)
 
@@ -167,16 +168,16 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.dbc_tree)
         self.left_panel.setLayout(left_layout)
 
-        splitter = QSplitter(self)
-        splitter.addWidget(self.left_panel)
-        splitter.addWidget(self.node_canvas)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
+        self._splitter = QSplitter(self)
+        self._splitter.addWidget(self.left_panel)
+        self._splitter.addWidget(self.node_canvas)
+        self._splitter.setStretchFactor(0, 0)
+        self._splitter.setStretchFactor(1, 1)
         screen = QApplication.primaryScreen().availableGeometry()
         left_width = int(screen.width() * 0.22)
         right_width = int(screen.width() * 0.63)
-        splitter.setSizes([left_width, right_width])
-        self.setCentralWidget(splitter)
+        self._splitter.setSizes([left_width, right_width])
+        self.setCentralWidget(self._splitter)
 
     def _build_shortcuts(self) -> None:
         self.delete_shortcut = QShortcut(QKeySequence("Delete"), self.node_canvas)
@@ -338,18 +339,26 @@ class MainWindow(QMainWindow):
         This is a stub — fill in the actual conversion logic here.
         `canvas_data` contains the full message-grouped JSON structure
         (same as what Export JSON writes to disk).
+        `output_dir` is the directory the user selected for output.
         """
         canvas_data = self._build_canvas_data()
         if not canvas_data.get("messages"):
             self.statusBar().showMessage("Nothing to convert — canvas is empty.")
             return
-        # TODO: implement conversion logic using canvas_data
+
+        output_dir = QFileDialog.getExistingDirectory(
+            self, "Select Output Directory"
+        )
+        if not output_dir:
+            self.statusBar().showMessage("Convert cancelled.")
+            return
+
+        # TODO: implement conversion logic using canvas_data and output_dir
         self.statusBar().showMessage(
             f"Convert: received {len(canvas_data['messages'])} message(s) "
             f"with {sum(len(m['signals']) for m in canvas_data['messages'])} signal(s). "
-            "(stub — no conversion logic yet)"
+            f"Output dir: {output_dir} (stub — no conversion logic yet)"
         )
-        print("123")
 
     def _build_canvas_data(self) -> dict:
         """Build the full message-grouped canvas data dict (mirrors export JSON)."""
@@ -499,6 +508,57 @@ class MainWindow(QMainWindow):
         if self.state.current_canvas_file is not None:
             parts.append(Path(self.state.current_canvas_file).name)
         self.setWindowTitle(" - ".join(parts))
+
+    def _restore_window_state(self) -> None:
+        geo = self._settings.value("window/geometry")
+        if geo is not None:
+            self.restoreGeometry(geo)
+        else:
+            screen = QApplication.primaryScreen().availableGeometry()
+            self.resize(
+                int(screen.width() * 0.85),
+                int(screen.height() * 0.85),
+            )
+            self.move(
+                int((screen.width() - self.width()) / 2),
+                int((screen.height() - self.height()) / 2),
+            )
+
+        splitter_sizes = self._settings.value("window/splitter_sizes")
+        if splitter_sizes is not None:
+            self._splitter.setSizes([int(s) for s in splitter_sizes])
+
+        last_dbc = self._settings.value("recent/last_dbc", "")
+        if last_dbc and Path(last_dbc).exists():
+            try:
+                self.import_dbc_silent(last_dbc)
+            except Exception:
+                pass
+
+    def _save_window_state(self) -> None:
+        self._settings.setValue("window/geometry", self.saveGeometry())
+        self._settings.setValue("window/splitter_sizes", self._splitter.sizes())
+        if self.state.current_document is not None:
+            self._settings.setValue("recent/last_dbc", self.state.current_document.file_path)
+        else:
+            self._settings.remove("recent/last_dbc")
+
+    def closeEvent(self, event) -> None:
+        self._save_window_state()
+        super().closeEvent(event)
+
+    def import_dbc_silent(self, file_path: str) -> None:
+        """Load a DBC file without dialog or status message (for auto-restore)."""
+        document = load_dbc_document(file_path)
+        self.state.current_document = document
+        self.dbc_tree.load_document(document)
+        self.node_canvas.set_available_condition_sources(
+            self._collect_condition_sources_from_document(document)
+        )
+        self._update_title()
+        self.statusBar().showMessage(
+            f"Restored {Path(file_path).name}. Drag signals to the canvas."
+        )
 
 
 def run() -> int:

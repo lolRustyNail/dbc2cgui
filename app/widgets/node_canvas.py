@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from contextlib import contextmanager
 
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QColor, QContextMenuEvent, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
+from PySide6.QtCore import QPoint, QRectF, Qt
+from PySide6.QtGui import QColor, QContextMenuEvent, QKeyEvent, QMouseEvent, QPainter, QPen, QBrush, QTransform, QWheelEvent
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView, QMenu, QMessageBox
 
 from app.widgets.condition_dialog import ConditionDialog
@@ -33,7 +33,7 @@ class NodeCanvasView(QGraphicsView):
         self._move_snapshot: dict | None = None
         self._move_start_positions: dict[str, tuple[float, float]] = {}
         self._condition_links: list[ConditionLinkItem] = []
-        self._scene.setSceneRect(-2000, -2000, 4000, 4000)
+        self._scene.setSceneRect(-5000, -5000, 10000, 10000)
         self.setScene(self._scene)
         self.setAcceptDrops(True)
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
@@ -41,6 +41,86 @@ class NodeCanvasView(QGraphicsView):
         self.setBackgroundBrush(QColor("#f1f5f9"))
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self._minimap_dragging = False
+        self._expand_scene_on_scroll = True
+
+    # ---------------------- Minimap overlay ----------------------
+
+    MINIMAP_W = 180
+    MINIMAP_H = 120
+    MINIMAP_MARGIN = 8
+
+    def _minimap_rect(self) -> QRectF:
+        """The minimap area in viewport coordinates (bottom-right corner)."""
+        vp = self.viewport().rect()
+        return QRectF(
+            vp.right() - self.MINIMAP_W - self.MINIMAP_MARGIN,
+            vp.bottom() - self.MINIMAP_H - self.MINIMAP_MARGIN,
+            self.MINIMAP_W,
+            self.MINIMAP_H,
+        )
+
+    def _scene_bounds_for_minimap(self) -> QRectF:
+        return self._scene.sceneRect()
+
+    def _minimap_transform(self) -> QTransform:
+        bounds = self._scene_bounds_for_minimap()
+        mr = self._minimap_rect()
+        sx = mr.width() / bounds.width()
+        sy = mr.height() / bounds.height()
+        scale = min(sx, sy)
+        dx = mr.x() + (mr.width() - bounds.width() * scale) / 2 - bounds.left() * scale
+        dy = mr.y() + (mr.height() - bounds.height() * scale) / 2 - bounds.top() * scale
+        return QTransform().translate(dx, dy).scale(scale, scale)
+
+    def _draw_minimap(self, painter: QPainter) -> None:
+        mr = self._minimap_rect()
+        # Background
+        painter.setPen(QPen(QColor("#94a3b8"), 1))
+        painter.setBrush(QBrush(QColor("#e2e8f0")))
+        painter.drawRoundedRect(mr, 4, 4)
+        painter.save()
+        painter.setClipRect(mr)
+        tf = self._minimap_transform()
+        # Condition links
+        painter.setPen(QPen(QColor("#f59e0b"), 1, Qt.PenStyle.DashLine))
+        for item in self._scene.items():
+            if isinstance(item, ConditionLinkItem):
+                p1 = tf.map(item.source_item.sceneBoundingRect().center())
+                p2 = tf.map(item.target_item.sceneBoundingRect().center())
+                painter.drawLine(p1.toPoint(), p2.toPoint())
+        # Nodes
+        for item in self._scene.items():
+            if isinstance(item, SignalNodeItem):
+                r = tf.mapRect(item.sceneBoundingRect())
+                color = QColor("#c4b5fd") if item.is_reference() else QColor("#94a3b8")
+                painter.setBrush(QBrush(color))
+                painter.setPen(QPen(QColor("#64748b"), 0.8))
+                painter.drawRoundedRect(r, 2, 2)
+        # Viewport indicator
+        vp_rect = self.mapToScene(self.viewport().rect()).boundingRect()
+        mapped_vp = tf.mapRect(vp_rect)
+        painter.setBrush(QBrush(QColor(59, 130, 246, 60)))
+        painter.setPen(QPen(QColor(59, 130, 246, 180), 1.5))
+        painter.drawRect(mapped_vp)
+        painter.restore()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._draw_minimap(painter)
+        painter.end()
+
+    def _minimap_navigate(self, viewport_pos: QPoint) -> None:
+        tf, ok = self._minimap_transform().inverted()
+        if not ok:
+            return
+        sp = tf.map(QPoint(viewport_pos.x(), viewport_pos.y()))
+        self.centerOn(sp.x(), sp.y())
+
+    def _in_minimap(self, pos: QPoint) -> bool:
+        return self._minimap_rect().contains(pos.x(), pos.y())
 
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasFormat(self.MIME_TYPE):
@@ -158,6 +238,11 @@ class NodeCanvasView(QGraphicsView):
         super().keyPressEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._in_minimap(event.pos()):
+            self._minimap_dragging = True
+            self._minimap_navigate(event.pos())
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.MiddleButton:
             self._is_panning = True
             self._pan_start = event.position().toPoint()
@@ -169,6 +254,10 @@ class NodeCanvasView(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if self._minimap_dragging:
+            self._minimap_navigate(event.pos())
+            event.accept()
+            return
         if self._is_panning:
             delta = event.position().toPoint() - self._pan_start
             self._pan_start = event.position().toPoint()
@@ -180,6 +269,10 @@ class NodeCanvasView(QGraphicsView):
         self._update_condition_links()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._minimap_dragging:
+            self._minimap_dragging = False
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.MiddleButton and self._is_panning:
             self._is_panning = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -245,12 +338,16 @@ class NodeCanvasView(QGraphicsView):
 
         reset_action = menu.addAction("Reset View")
         fit_action = None
+        auto_layout_action = None
         if self._has_signal_nodes():
+            auto_layout_action = menu.addAction("Auto Layout")
             fit_action = menu.addAction("Fit Nodes")
 
         chosen_action = menu.exec(event.globalPos())
         if chosen_action == reset_action:
             self.reset_view()
+        elif auto_layout_action is not None and chosen_action == auto_layout_action:
+            self.auto_layout()
         elif fit_action is not None and chosen_action == fit_action:
             self.fit_all_nodes()
 
@@ -266,6 +363,39 @@ class NodeCanvasView(QGraphicsView):
             return
 
         self.scale(factor, factor)
+        self.viewport().update()
+
+    def scrollContentsBy(self, dx, dy) -> None:
+        super().scrollContentsBy(dx, dy)
+        self._expand_scene_rect()
+        self.viewport().update()
+
+    def _expand_scene_rect(self) -> None:
+        """Grow the scene rect if the viewport approaches the edge, giving an infinite canvas feel."""
+        if not self._expand_scene_on_scroll:
+            return
+        vp_scene = self.mapToScene(self.viewport().rect()).boundingRect()
+        sr = self._scene.sceneRect()
+        margin = 2000
+        need_expand = False
+        new_left = sr.left()
+        new_top = sr.top()
+        new_right = sr.right()
+        new_bottom = sr.bottom()
+        if vp_scene.left() < sr.left() + margin:
+            new_left = vp_scene.left() - margin
+            need_expand = True
+        if vp_scene.top() < sr.top() + margin:
+            new_top = vp_scene.top() - margin
+            need_expand = True
+        if vp_scene.right() > sr.right() - margin:
+            new_right = vp_scene.right() + margin
+            need_expand = True
+        if vp_scene.bottom() > sr.bottom() - margin:
+            new_bottom = vp_scene.bottom() + margin
+            need_expand = True
+        if need_expand:
+            self._scene.setSceneRect(new_left, new_top, new_right - new_left, new_bottom - new_top)
 
     def reset_view(self) -> None:
         self.resetTransform()
@@ -281,6 +411,56 @@ class NodeCanvasView(QGraphicsView):
             bounds = bounds.united(item.sceneBoundingRect())
 
         self.fitInView(bounds.adjusted(-40, -40, 40, 40), Qt.AspectRatioMode.KeepAspectRatio)
+
+    def auto_layout(self) -> None:
+        """Arrange all non-reference nodes grouped by message in a vertical grid layout.
+
+        Nodes are laid out top-to-bottom in columns (max_rows per column),
+        then move right. Each message group gets its own column block.
+        """
+        items = [
+            item for item in self._scene.items()
+            if isinstance(item, SignalNodeItem) and not item.is_reference()
+        ]
+        if not items:
+            return
+
+        # Group by message
+        groups: dict[str, list[SignalNodeItem]] = {}
+        for item in items:
+            msg = item.signal_data.get("message", "")
+            groups.setdefault(msg, []).append(item)
+
+        # Sort messages alphabetically, sort signals within each message by start_bit
+        sorted_messages = sorted(groups.keys())
+        for msg in sorted_messages:
+            groups[msg].sort(
+                key=lambda it: (it.signal_data.get("start_bit", 0), it.signal_data.get("signal", ""))
+            )
+
+        node_w = SignalNodeItem.WIDTH
+        node_h = SignalNodeItem.HEIGHT
+        h_gap = 40
+        v_gap = 24
+        group_gap = 120  # extra horizontal gap between message groups
+        max_rows = max(1, 8)  # nodes per column before wrapping right
+
+        with self._batch_history():
+            x = 0.0
+            for msg in sorted_messages:
+                group_items = groups[msg]
+                for i, item in enumerate(group_items):
+                    row = i % max_rows
+                    col = i // max_rows
+                    item_x = x + col * (node_w + h_gap)
+                    item_y = row * (node_h + v_gap)
+                    sx, sy = self.snap_point(item_x, item_y)
+                    item.setPos(sx, sy)
+                cols_needed = (len(group_items) + max_rows - 1) // max_rows
+                x += cols_needed * (node_w + h_gap) + group_gap
+
+        self._update_condition_links()
+        self.fit_all_nodes()
 
     def delete_selected_items(self) -> None:
         selected_links = [
@@ -521,6 +701,7 @@ class NodeCanvasView(QGraphicsView):
         for scene_item in self._scene.items():
             if isinstance(scene_item, ConditionLinkItem):
                 scene_item.update_path()
+        self.viewport().update()
 
     def snap_point(self, x: float, y: float) -> tuple[float, float]:
         return SignalNodeItem.snap_value(x), SignalNodeItem.snap_value(y)
