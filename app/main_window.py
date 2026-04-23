@@ -37,7 +37,16 @@ class MainWindow(QMainWindow):
         self.node_canvas = NodeCanvasView()
 
         self.setWindowTitle("DBC2C")
-        self.resize(1400, 900)
+
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(
+            int(screen.width() * 0.85),
+            int(screen.height() * 0.85),
+        )
+        self.move(
+            int((screen.width() - self.width()) / 2),
+            int((screen.height() - self.height()) / 2),
+        )
 
         self._build_actions()
         self._build_layout()
@@ -163,7 +172,10 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.node_canvas)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([360, 1040])
+        screen = QApplication.primaryScreen().availableGeometry()
+        left_width = int(screen.width() * 0.22)
+        right_width = int(screen.width() * 0.63)
+        splitter.setSizes([left_width, right_width])
         self.setCentralWidget(splitter)
 
     def _build_shortcuts(self) -> None:
