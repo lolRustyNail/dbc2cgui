@@ -126,8 +126,8 @@ class NodeCanvasView(QGraphicsView):
         self.clear_history()
 
     def clear_canvas(self) -> None:
-        self._condition_links.clear()
         self._scene.clear()
+        self._condition_links.clear()
 
     def export_nodes(self) -> list[dict]:
         nodes = [
@@ -562,8 +562,8 @@ class NodeCanvasView(QGraphicsView):
     def _restore_state(self, state: dict) -> None:
         self._suppress_history = True
         try:
-            self._condition_links.clear()
             self._scene.clear()
+            self._condition_links.clear()
             id_map: dict[str, SignalNodeItem] = {}
             for node in state["nodes"]:
                 item = SignalNodeItem(node)
