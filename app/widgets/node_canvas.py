@@ -113,6 +113,14 @@ class NodeCanvasView(QGraphicsView):
                 if node.get("condition"):
                     payload["condition"] = dict(node["condition"])
                 self.add_signal_node(payload, node.get("x", 0), node.get("y", 0), snap=False)
+
+            # Restore condition link visibility for nodes with shown=true
+            for scene_item in list(self._scene.items()):
+                if not isinstance(scene_item, SignalNodeItem) or scene_item.is_reference():
+                    continue
+                condition = scene_item.signal_data.get("condition")
+                if condition and condition.get("shown"):
+                    self._show_condition_dependency(scene_item)
         finally:
             self._suppress_history = False
         self.clear_history()

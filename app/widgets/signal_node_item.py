@@ -209,6 +209,17 @@ class SignalNodeItem(QGraphicsRectItem):
             self._dialog_text(),
         )
 
+    def _is_condition_shown(self) -> bool:
+        """Check if a ConditionLinkItem exists for this node in the scene."""
+        scene = self.scene()
+        if scene is None:
+            return False
+        from app.widgets.condition_link_item import ConditionLinkItem
+        for item in scene.items():
+            if isinstance(item, ConditionLinkItem) and item.target_item is self:
+                return True
+        return False
+
     def has_condition(self) -> bool:
         return bool(self.signal_data.get("condition"))
 
@@ -247,7 +258,9 @@ class SignalNodeItem(QGraphicsRectItem):
         if include_id:
             payload["id"] = self.node_id
         if self.has_condition():
-            payload["condition"] = dict(self.signal_data["condition"])
+            cond = dict(self.signal_data["condition"])
+            cond["shown"] = self._is_condition_shown()
+            payload["condition"] = cond
         if self.is_reference():
             payload["reference"] = True
         return payload
@@ -271,5 +284,7 @@ class SignalNodeItem(QGraphicsRectItem):
             },
         }
         if self.has_condition():
-            export_data["condition"] = dict(self.signal_data["condition"])
+            cond = dict(self.signal_data["condition"])
+            cond["shown"] = self._is_condition_shown()
+            export_data["condition"] = cond
         return export_data

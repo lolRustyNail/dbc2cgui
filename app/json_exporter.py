@@ -458,4 +458,7 @@ def _normalize_condition(condition: object, index: int) -> dict:
                 f"Condition #{index} field '{field_name}' must be a non-empty string."
             )
         normalized[field_name] = value
+    shown = condition.get("shown")
+    if shown is not None:
+        normalized["shown"] = bool(shown)
     return normalized
