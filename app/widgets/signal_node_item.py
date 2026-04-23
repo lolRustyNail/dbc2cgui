@@ -52,7 +52,7 @@ class SignalNodeItem(QGraphicsRectItem):
         detail_lines = [
             f"Message: {self.signal_data['message']}",
             f"Node: {self.signal_data['node']}",
-            f"Start Bit: {self.signal_data['start_bit']}  Length: {self.signal_data['length']}",
+            f"Start Bit: {self._display_start_bit()}  Length: {self.signal_data['length']}",
         ]
         detail_item = QGraphicsTextItem("\n".join(detail_lines), self)
         detail_item.setDefaultTextColor(QColor("#334155"))
@@ -76,6 +76,33 @@ class SignalNodeItem(QGraphicsRectItem):
         hint_item.setDefaultTextColor(QColor("#64748b"))
         hint_item.setPos(14, 140)
         self._hint_item = hint_item
+
+    @staticmethod
+    def _msb_to_lsb(start_bit_msb: int, length: int, byte_order: str) -> int:
+        if byte_order != "big_endian" or length <= 0:
+            return start_bit_msb
+        s_byte = start_bit_msb // 8
+        s_bit = start_bit_msb % 8
+        bits_in_first_byte = s_bit + 1
+        if length <= bits_in_first_byte:
+            return start_bit_msb - length + 1
+        remaining = length - bits_in_first_byte
+        full_bytes = remaining // 8
+        last_bits = remaining % 8
+        if last_bits == 0:
+            lsb_byte = s_byte + 1 + full_bytes - 1
+            return lsb_byte * 8
+        else:
+            lsb_byte = s_byte + 1 + full_bytes
+            return lsb_byte * 8 + (8 - last_bits)
+
+    def _display_start_bit(self) -> str:
+        start = self.signal_data.get("start_bit", 0)
+        length = self.signal_data.get("length", 0)
+        byte_order = self.signal_data.get("byte_order", "big_endian")
+        lsb = self._msb_to_lsb(start, length, byte_order)
+        order_label = "BE" if byte_order == "big_endian" else "LE"
+        return f"{lsb} ({order_label})"
 
     def _condition_summary(self) -> str:
         if self.is_reference():
@@ -110,7 +137,7 @@ class SignalNodeItem(QGraphicsRectItem):
             f"Node: {self.signal_data['node']}",
             f"Message: {self.signal_data['message']}",
             f"Frame ID: {self.signal_data['frame_id']} (0x{self.signal_data['frame_id']:X})",
-            f"Start Bit: {self.signal_data['start_bit']}",
+            f"Start Bit: {self._display_start_bit()}",
             f"Length: {self.signal_data['length']}",
         ]
 
@@ -215,6 +242,7 @@ class SignalNodeItem(QGraphicsRectItem):
             "signal": self.signal_data["signal"],
             "start_bit": self.signal_data["start_bit"],
             "length": self.signal_data["length"],
+            "byte_order": self.signal_data.get("byte_order", "big_endian"),
         }
         if include_id:
             payload["id"] = self.node_id
@@ -239,6 +267,7 @@ class SignalNodeItem(QGraphicsRectItem):
                 "frame_id": self.signal_data["frame_id"],
                 "start_bit": self.signal_data["start_bit"],
                 "length": self.signal_data["length"],
+                "byte_order": self.signal_data.get("byte_order", "big_endian"),
             },
         }
         if self.has_condition():

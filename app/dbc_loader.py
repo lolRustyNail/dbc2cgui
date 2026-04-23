@@ -31,6 +31,7 @@ def load_dbc_document(file_path: str) -> DbcDocument:
                                 name=signal.name,
                                 start_bit=signal.start,
                                 length=signal.length,
+                                byte_order=getattr(signal, "byte_order", "big_endian"),
                                 receivers=list(signal.receivers or []),
                             )
                             for signal in message.signals
@@ -43,6 +44,7 @@ def load_dbc_document(file_path: str) -> DbcDocument:
                     name=signal.name,
                     start_bit=signal.start,
                     length=signal.length,
+                    byte_order=getattr(signal, "byte_order", "big_endian"),
                     receivers=list(signal.receivers or []),
                 )
                 for signal in message.signals

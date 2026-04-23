@@ -231,6 +231,7 @@ class DbcTreeWidget(QTreeWidget):
                 "signal": signal.name,
                 "start_bit": signal.start_bit,
                 "length": signal.length,
+                "byte_order": signal.byte_order,
             },
         )
         signal_item.setFlags(signal_item.flags() | Qt.ItemFlag.ItemIsDragEnabled)

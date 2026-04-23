@@ -89,6 +89,7 @@ class NodeCanvasView(QGraphicsView):
                     "frame_id": source.get("frame_id", 0),
                     "start_bit": source.get("start_bit", 0),
                     "length": source.get("length", 0),
+                    "byte_order": source.get("byte_order", "big_endian"),
                 }
             )
         self._available_condition_sources = unique_sources
@@ -107,6 +108,7 @@ class NodeCanvasView(QGraphicsView):
                     "signal": node["signal"],
                     "start_bit": node["start_bit"],
                     "length": node["length"],
+                    "byte_order": node.get("byte_order", "big_endian"),
                 }
                 if node.get("condition"):
                     payload["condition"] = dict(node["condition"])
@@ -407,6 +409,7 @@ class NodeCanvasView(QGraphicsView):
             "signal": source_info.get("source_signal", condition.get("source_signal", "")),
             "start_bit": source_info.get("start_bit", 0),
             "length": source_info.get("length", 0),
+            "byte_order": source_info.get("byte_order", "big_endian"),
             "reference": True,
         }
 
@@ -476,6 +479,7 @@ class NodeCanvasView(QGraphicsView):
                     "frame_id": scene_item.signal_data.get("frame_id", 0),
                     "start_bit": scene_item.signal_data.get("start_bit", 0),
                     "length": scene_item.signal_data.get("length", 0),
+                    "byte_order": scene_item.signal_data.get("byte_order", "big_endian"),
                 }
             )
         return sources

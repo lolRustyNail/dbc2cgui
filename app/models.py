@@ -8,6 +8,7 @@ class DbcSignal:
     name: str
     start_bit: int
     length: int
+    byte_order: str = "big_endian"
     receivers: list[str] = field(default_factory=list)
 
 

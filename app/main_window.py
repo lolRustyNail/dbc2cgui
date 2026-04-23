@@ -452,6 +452,7 @@ class MainWindow(QMainWindow):
                                 "frame_id": message.frame_id,
                                 "start_bit": signal.start_bit,
                                 "length": signal.length,
+                                "byte_order": signal.byte_order,
                             }
                         )
 
@@ -474,6 +475,7 @@ class MainWindow(QMainWindow):
                     "frame_id": node.get("frame_id", 0),
                     "start_bit": node.get("start_bit", 0),
                     "length": node.get("length", 0),
+                    "byte_order": node.get("byte_order", "big_endian"),
                 }
             )
         return sources
