@@ -461,4 +461,10 @@ def _normalize_condition(condition: object, index: int) -> dict:
     shown = condition.get("shown")
     if shown is not None:
         normalized["shown"] = bool(shown)
+    source_x = condition.get("source_x")
+    if source_x is not None:
+        normalized["source_x"] = float(source_x)
+    source_y = condition.get("source_y")
+    if source_y is not None:
+        normalized["source_y"] = float(source_y)
     return normalized

@@ -354,7 +354,11 @@ class NodeCanvasView(QGraphicsView):
         source_item = self._find_condition_source_item(condition, exclude_item=target_item)
         if source_item is None:
             payload = self._condition_source_payload(condition)
-            x, y = self._reference_position_for_target(target_item)
+            # Use saved position if available, otherwise calculate default
+            if "source_x" in condition and "source_y" in condition:
+                x, y = condition["source_x"], condition["source_y"]
+            else:
+                x, y = self._reference_position_for_target(target_item)
             self.add_signal_node(payload, x, y)
             source_item = self._find_condition_source_item(condition, exclude_item=target_item)
             if source_item is None:

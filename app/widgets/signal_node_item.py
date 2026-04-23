@@ -220,6 +220,17 @@ class SignalNodeItem(QGraphicsRectItem):
                 return True
         return False
 
+    def _condition_source_item(self) -> SignalNodeItem | None:
+        """Return the ConditionLinkItem's source item for this node, if any."""
+        scene = self.scene()
+        if scene is None:
+            return None
+        from app.widgets.condition_link_item import ConditionLinkItem
+        for item in scene.items():
+            if isinstance(item, ConditionLinkItem) and item.target_item is self:
+                return item.source_item
+        return None
+
     def has_condition(self) -> bool:
         return bool(self.signal_data.get("condition"))
 
@@ -260,6 +271,11 @@ class SignalNodeItem(QGraphicsRectItem):
         if self.has_condition():
             cond = dict(self.signal_data["condition"])
             cond["shown"] = self._is_condition_shown()
+            source_item = self._condition_source_item()
+            if source_item is not None and source_item.is_reference():
+                source_pos = source_item.scenePos()
+                cond["source_x"] = round(source_pos.x(), 2)
+                cond["source_y"] = round(source_pos.y(), 2)
             payload["condition"] = cond
         if self.is_reference():
             payload["reference"] = True
@@ -286,5 +302,10 @@ class SignalNodeItem(QGraphicsRectItem):
         if self.has_condition():
             cond = dict(self.signal_data["condition"])
             cond["shown"] = self._is_condition_shown()
+            source_item = self._condition_source_item()
+            if source_item is not None and source_item.is_reference():
+                source_pos = source_item.scenePos()
+                cond["source_x"] = round(source_pos.x(), 2)
+                cond["source_y"] = round(source_pos.y(), 2)
             export_data["condition"] = cond
         return export_data
