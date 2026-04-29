@@ -354,18 +354,7 @@ class MainWindow(QMainWindow):
         self.state.has_unsaved_changes = False
 
         for data in payload.get("custom_nodes", []):
-            mapping = [MappingEntry(dbc_value=m["dbc_value"], radar_value=m["radar_value"]) for m in data.get("mapping_table", [])]
-            node = CustomNode(
-                id=data.get("id", ""),
-                name=data.get("name", ""),
-                target_variable=data.get("target_variable", ""),
-                description=data.get("description", ""),
-                source_message=data.get("source_message", ""),
-                source_signal=data.get("source_signal", ""),
-                mapping_table=mapping,
-            )
-            self.state.custom_nodes.append(node)
-            self.dbc_tree.add_custom_node(node)
+            self.node_canvas.add_signal_node(data, data.get("x", 0), data.get("y", 0), snap=False)
 
         for data in payload.get("links", []):
             source_id = data.get("source_id", "")
@@ -520,10 +509,24 @@ class MainWindow(QMainWindow):
             if self.state.current_document is not None
             else None
         )
+        custom_nodes = []
+        for node in self.state.custom_nodes:
+            custom_nodes.append({
+                "id": node.id,
+                "type": "custom",
+                "signal": node.name,
+                "target_variable": node.target_variable,
+                "description": node.description,
+                "source_message": node.source_message,
+                "source_signal": node.source_signal,
+                "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+            })
         return {
             "version": 2,
             "dbc_file": dbc_file,
             "messages": _build_messages_from_canvas(dbc_file, self.node_canvas.export_nodes()),
+            "custom_nodes": custom_nodes,
+            "links": self.node_canvas.export_links(),
         }
 
     def clear_canvas(self) -> None:
