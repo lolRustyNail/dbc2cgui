@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 class MappingEntry:
     dbc_value: str
     radar_value: str
+    alias: str = ""
 
 
 @dataclass(slots=True)

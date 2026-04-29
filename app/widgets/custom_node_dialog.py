@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import uuid
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -19,6 +20,8 @@ from PySide6.QtWidgets import (
 
 from app.models import CustomNode, MappingEntry
 
+READONLY_BG = QColor("#f0f0f0")
+
 
 class CustomNodeDialog(QDialog):
     def __init__(
@@ -29,21 +32,23 @@ class CustomNodeDialog(QDialog):
         super().__init__(parent)
         self._current_node = current_node
         self._result_node: CustomNode | None = None
+        self._is_edit_mode = current_node is not None
 
         self.setWindowTitle("Create Custom Mapping Node" if current_node is None else "Edit Custom Mapping Node")
         self.setModal(True)
-        self.resize(520, 360)
+        self.resize(600, 400)
 
         self._name_edit = QLineEdit()
         self._desc_edit = QLineEdit()
         self._default_value_edit = QLineEdit()
         self._default_value_edit.setPlaceholderText("Value when DBC value not in mapping table")
         self._mapping_table = QTableWidget()
-        self._mapping_table.setColumnCount(3)
-        self._mapping_table.setHorizontalHeaderLabels(["DBC Value", "Radar Value", ""])
+        self._mapping_table.setColumnCount(4)
+        self._mapping_table.setHorizontalHeaderLabels(["DBC Value", "Radar Value", "Alias", ""])
         self._mapping_table.horizontalHeader().setStretchLastSection(True)
         self._mapping_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self._mapping_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self._mapping_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self._mapping_table.verticalHeader().setVisible(False)
 
         self._build_form()
@@ -76,8 +81,16 @@ class CustomNodeDialog(QDialog):
         form.addRow("Description", self._desc_edit)
         form.addRow("Default Value", self._default_value_edit)
 
+        if self._is_edit_mode:
+            hint = QLabel("Gray columns are read-only in edit mode")
+            hint.setStyleSheet("color: #666; font-size: 11px;")
+        else:
+            hint = QLabel("Radar Value and Alias will be read-only after creation")
+            hint.setStyleSheet("color: #666; font-size: 11px;")
+
         mapping_layout = QVBoxLayout()
         mapping_layout.addWidget(QLabel("Mapping Table (DBC Value → Radar Value)"))
+        mapping_layout.addWidget(hint)
         mapping_layout.addWidget(self._mapping_table)
         mapping_layout.addWidget(add_row_btn)
 
@@ -86,15 +99,31 @@ class CustomNodeDialog(QDialog):
         main_layout.addLayout(mapping_layout)
         main_layout.addWidget(buttons)
 
-    def _add_mapping_row(self, dbc_value: str = "", radar_value: str = "") -> None:
+    def _add_mapping_row(self, dbc_value: str = "", radar_value: str = "", alias: str = "") -> None:
         row = self._mapping_table.rowCount()
         self._mapping_table.insertRow(row)
-        self._mapping_table.setItem(row, 0, QTableWidgetItem(dbc_value))
-        self._mapping_table.setItem(row, 1, QTableWidgetItem(radar_value))
+
+        dbc_item = QTableWidgetItem(dbc_value)
+        if self._is_edit_mode:
+            dbc_item.setBackground(QColor("#ffffff"))
+        self._mapping_table.setItem(row, 0, dbc_item)
+
+        radar_item = QTableWidgetItem(radar_value)
+        radar_item.setBackground(READONLY_BG)
+        if self._is_edit_mode:
+            radar_item.setFlags(radar_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self._mapping_table.setItem(row, 1, radar_item)
+
+        alias_item = QTableWidgetItem(alias)
+        alias_item.setBackground(READONLY_BG)
+        if self._is_edit_mode:
+            alias_item.setFlags(alias_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self._mapping_table.setItem(row, 2, alias_item)
+
         del_btn = QPushButton("✕")
         del_btn.setFixedWidth(32)
         del_btn.clicked.connect(lambda checked, r=row: self._delete_mapping_row(r))
-        self._mapping_table.setCellWidget(row, 2, del_btn)
+        self._mapping_table.setCellWidget(row, 3, del_btn)
 
     def _delete_mapping_row(self, row: int) -> None:
         if 0 <= row < self._mapping_table.rowCount():
@@ -105,7 +134,7 @@ class CustomNodeDialog(QDialog):
         self._desc_edit.setText(node.description)
         self._default_value_edit.setText(node.default_value)
         for entry in node.mapping_table:
-            self._add_mapping_row(entry.dbc_value, entry.radar_value)
+            self._add_mapping_row(entry.dbc_value, entry.radar_value, entry.alias)
 
     def _accept(self) -> None:
         name = self._name_edit.text().strip()
@@ -117,11 +146,20 @@ class CustomNodeDialog(QDialog):
         for row in range(self._mapping_table.rowCount()):
             dbc_item = self._mapping_table.item(row, 0)
             radar_item = self._mapping_table.item(row, 1)
-            if dbc_item and radar_item:
-                dbc_val = dbc_item.text().strip()
-                radar_val = radar_item.text().strip()
-                if dbc_val and radar_val:
-                    mapping_table.append(MappingEntry(dbc_value=dbc_val, radar_value=radar_val))
+            alias_item = self._mapping_table.item(row, 2)
+
+            dbc_val = dbc_item.text().strip() if dbc_item else ""
+            radar_val = radar_item.text().strip() if radar_item else ""
+            alias_val = alias_item.text().strip() if alias_item else ""
+
+            if not dbc_val or not radar_val or not alias_val:
+                QMessageBox.warning(
+                    self, "Incomplete Row",
+                    f"Row {row + 1}: All fields (DBC Value, Radar Value, Alias) are required.",
+                )
+                return
+
+            mapping_table.append(MappingEntry(dbc_value=dbc_val, radar_value=radar_val, alias=alias_val))
 
         node_id = self._current_node.id if self._current_node else uuid.uuid4().hex
         source_message = self._current_node.source_message if self._current_node else ""

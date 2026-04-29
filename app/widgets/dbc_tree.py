@@ -250,7 +250,7 @@ class DbcTreeWidget(QTreeWidget):
             "description": node.description,
             "source_message": node.source_message,
             "source_signal": node.source_signal,
-            "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+            "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value, "alias": m.alias} for m in node.mapping_table],
             "default_value": node.default_value,
         }
 

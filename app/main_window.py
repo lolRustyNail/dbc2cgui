@@ -519,7 +519,7 @@ class MainWindow(QMainWindow):
                 "description": node.description,
                 "source_message": node.source_message,
                 "source_signal": node.source_signal,
-                "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+                "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value, "alias": m.alias} for m in node.mapping_table],
                 "default_value": node.default_value,
             })
         return {
@@ -586,7 +586,7 @@ class MainWindow(QMainWindow):
             nodes_data = load_custom_nodes_json(file_path)
             for data in nodes_data:
                 canvas_dict = custom_node_to_canvas_dict(data)
-                mapping = [MappingEntry(dbc_value=m["dbc_value"], radar_value=m["radar_value"]) for m in data.get("mapping_table", [])]
+                mapping = [MappingEntry(dbc_value=m["dbc_value"], radar_value=m["radar_value"], alias=m.get("alias", "")) for m in data.get("mapping_table", [])]
                 node = CustomNode(
                     id=data.get("id", ""),
                     name=data.get("name", ""),
@@ -625,7 +625,7 @@ class MainWindow(QMainWindow):
                     "description": node.description,
                     "source_message": node.source_message,
                     "source_signal": node.source_signal,
-                    "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+                    "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value, "alias": m.alias} for m in node.mapping_table],
                     "default_value": node.default_value,
                 })
             export_custom_nodes_json(file_path, nodes_data)
@@ -801,7 +801,7 @@ class MainWindow(QMainWindow):
             try:
                 custom_nodes_data = json.loads(custom_nodes_json)
                 for data in custom_nodes_data:
-                    mapping = [MappingEntry(dbc_value=m["dbc_value"], radar_value=m["radar_value"]) for m in data.get("mapping_table", [])]
+                    mapping = [MappingEntry(dbc_value=m["dbc_value"], radar_value=m["radar_value"], alias=m.get("alias", "")) for m in data.get("mapping_table", [])]
                     node = CustomNode(
                         id=data.get("id", ""),
                         name=data.get("name", ""),
@@ -857,7 +857,7 @@ class MainWindow(QMainWindow):
                 "description": node.description,
                 "source_message": node.source_message,
                 "source_signal": node.source_signal,
-                "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+                "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value, "alias": m.alias} for m in node.mapping_table],
                 "default_value": node.default_value,
             })
         self._settings.setValue("custom_nodes", json.dumps(custom_nodes_data))

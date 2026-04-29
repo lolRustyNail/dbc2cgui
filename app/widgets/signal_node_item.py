@@ -59,7 +59,9 @@ class SignalNodeItem(QGraphicsRectItem):
             default_val = self.signal_data.get("default_value", "")
             mappings = self.signal_data.get("mapping_table", [])
             if mappings:
-                summary = ", ".join(f"{m['dbc_value']}→{m['radar_value']}" for m in mappings[:3])
+                summary = ", ".join(
+                    f"{m['dbc_value']}→{m['radar_value']}({m.get('alias', '')})" for m in mappings[:3]
+                )
                 if len(mappings) > 3:
                     summary += f" (+{len(mappings)-3} more)"
                 detail_lines.append(f"Mapping: {summary}")
@@ -167,7 +169,9 @@ class SignalNodeItem(QGraphicsRectItem):
             if mappings:
                 lines.extend(["", "Mapping Table:"])
                 for m in mappings:
-                    lines.append(f"  {m['dbc_value']} → {m['radar_value']}")
+                    alias = m.get("alias", "")
+                    alias_text = f" ({alias})" if alias else ""
+                    lines.append(f"  {m['dbc_value']} → {m['radar_value']}{alias_text}")
             default_val = self.signal_data.get("default_value", "")
             if default_val:
                 lines.extend(["", f"Default Value: {default_val}"])
