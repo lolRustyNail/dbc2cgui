@@ -5,6 +5,15 @@
 ## [Unreleased]
 
 ### Added
+- **自定义映射节点 (Custom Mapping Nodes)**:
+  - 左侧树新增 "Custom Nodes" 分区，始终显示，不依赖 DBC 加载。
+  - 右键菜单创建自定义节点：定义映射名称、目标雷达变量、信号长度、字节序。
+  - 支持映射表编辑：DBC原始值 → 雷达目标值（支持数值类型）。
+  - 自定义节点可拖拽到画布，渲染为紫色 "CUSTOM" 徽章节点。
+  - 通过条件连线关联 DBC 源信号，自动填充 source_message/source_signal。
+  - 导出到 JSON 时存储在独立的 `custom_nodes` 数组中。
+  - 支持独立分发文件格式 (`.custom.json`)，可导入/导出自定义节点供其他用户使用。
+  - 文件菜单新增 "Import Custom Nodes" (`Ctrl+Shift+N`) 和 "Export Custom Nodes" 选项。
 - **未保存状态指示器**:
   - 窗口标题末尾显示 `*` 标记,提示用户存在未保存的更改。
   - 操作触发:新增/删除/复制节点、编辑/清除接收条件、显示/隐藏条件依赖连线、自动布局、节点拖动、撤销/重做。

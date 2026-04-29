@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QBrush, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 
 class SignalNodeItem(QGraphicsRectItem):
+    edit_requested = Signal(str)
     GRID_SIZE = 24
     WIDTH = 350
     HEIGHT = 162
@@ -39,7 +40,7 @@ class SignalNodeItem(QGraphicsRectItem):
         self.setToolTip(self._dialog_text())
 
     def _build_text(self) -> None:
-        title_item = QGraphicsTextItem(self.signal_data["signal"], self)
+        title_item = QGraphicsTextItem(self.signal_data.get("signal", ""), self)
         title_font = QFont()
         title_font.setPointSize(12)
         title_font.setBold(True)
@@ -49,11 +50,28 @@ class SignalNodeItem(QGraphicsRectItem):
         title_item.setPos(14, 10)
         self._title_item = title_item
 
-        detail_lines = [
-            f"Message: {self.signal_data['message']}",
-            f"Node: {self.signal_data['node']}",
-            f"Start Bit: {self._display_start_bit()}  Length: {self.signal_data['length']}",
-        ]
+        if self.signal_data.get("type") == "custom":
+            source_msg = self.signal_data.get("source_message", "")
+            source_sig = self.signal_data.get("source_signal", "")
+            source_text = f"{source_msg}.{source_sig}" if source_msg and source_sig else "(not connected)"
+            detail_lines = [
+                f"Target: {self.signal_data.get('target_variable', '')}",
+                f"Source: {source_text}",
+                f"Length: {self.signal_data.get('length', 8)}",
+            ]
+            mappings = self.signal_data.get("mapping_table", [])
+            if mappings:
+                summary = ", ".join(f"{m['dbc_value']}→{m['radar_value']}" for m in mappings[:3])
+                if len(mappings) > 3:
+                    summary += f" (+{len(mappings)-3} more)"
+                detail_lines.append(f"Mapping: {summary}")
+        else:
+            detail_lines = [
+                f"Message: {self.signal_data.get('message', '')}",
+                f"Node: {self.signal_data.get('node', '')}",
+                f"Start Bit: {self._display_start_bit()}  Length: {self.signal_data.get('length', 0)}",
+            ]
+
         detail_item = QGraphicsTextItem("\n".join(detail_lines), self)
         detail_item.setDefaultTextColor(QColor("#334155"))
         detail_item.setTextWidth(self.WIDTH - 28)
@@ -69,7 +87,8 @@ class SignalNodeItem(QGraphicsRectItem):
         condition_item.setPos(14, 100)
         self._condition_item = condition_item
 
-        hint_item = QGraphicsTextItem("Double-click for details", self)
+        hint_text = "Double-click to edit" if self.signal_data.get("type") == "custom" else "Double-click for details"
+        hint_item = QGraphicsTextItem(hint_text, self)
         hint_font = QFont()
         hint_font.setPointSize(8)
         hint_item.setFont(hint_font)
@@ -120,6 +139,8 @@ class SignalNodeItem(QGraphicsRectItem):
     def _direction_palette(self) -> tuple[QColor, QColor]:
         if self.is_reference():
             return QColor("#e2e8f0"), QColor("#475569")
+        if self.signal_data.get("type") == "custom":
+            return QColor("#f3e8ff"), QColor("#7c3aed")
         direction = self.signal_data["direction"].lower()
         if direction == "tx":
             return QColor("#dbeafe"), QColor("#1d4ed8")
@@ -128,9 +149,40 @@ class SignalNodeItem(QGraphicsRectItem):
     def _badge_text(self) -> str:
         if self.is_reference():
             return "REF"
+        if self.signal_data.get("type") == "custom":
+            return "CUSTOM"
         return self.signal_data["direction"].upper()
 
     def _dialog_text(self) -> str:
+        if self.signal_data.get("type") == "custom":
+            lines = [
+                f"Custom Node: {self.signal_data.get('signal', '')}",
+                f"Target Variable: {self.signal_data.get('target_variable', '')}",
+                f"Description: {self.signal_data.get('description', '')}",
+                f"Length: {self.signal_data.get('length', 8)}",
+                f"Byte Order: {self.signal_data.get('byte_order', 'big_endian')}",
+            ]
+            source_msg = self.signal_data.get("source_message", "")
+            source_sig = self.signal_data.get("source_signal", "")
+            if source_msg and source_sig:
+                lines.extend(["", "Source Signal:", f"  Message: {source_msg}", f"  Signal: {source_sig}"])
+            mappings = self.signal_data.get("mapping_table", [])
+            if mappings:
+                lines.extend(["", "Mapping Table:"])
+                for m in mappings:
+                    lines.append(f"  {m['dbc_value']} → {m['radar_value']}")
+            condition = self.signal_data.get("condition")
+            if condition:
+                lines.extend([
+                    "",
+                    "Receive Condition:",
+                    f"  Source Node: {condition.get('source_node', '')}",
+                    f"  Source Message: {condition.get('source_message', '')}",
+                    f"  Source Signal: {condition.get('source_signal', '')}",
+                    f"  Expression: {condition.get('operator', '==')} {condition.get('value', '')}",
+                ])
+            return "\n".join(lines)
+
         lines = [
             f"Signal: {self.signal_data['signal']}",
             f"Direction: {self.signal_data['direction'].upper()}",
@@ -194,7 +246,10 @@ class SignalNodeItem(QGraphicsRectItem):
         painter.drawLine(12, 134, self.WIDTH - 12, 134)
 
     def mouseDoubleClickEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-        self.show_details()
+        if self.signal_data.get("type") == "custom":
+            self.edit_requested.emit(self.node_id)
+        else:
+            self.show_details()
         event.accept()
 
     def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:
@@ -283,22 +338,29 @@ class SignalNodeItem(QGraphicsRectItem):
 
     def to_export_dict(self) -> dict:
         scene_position = self.scenePos()
+        is_custom = self.signal_data.get("type") == "custom"
         export_data = {
             "id": self.node_id,
-            "type": "signal",
-            "node": self.signal_data["node"],
-            "message": self.signal_data["message"],
-            "signal": self.signal_data["signal"],
-            "direction": self.signal_data["direction"],
+            "type": "custom" if is_custom else "signal",
+            "node": self.signal_data.get("node", ""),
+            "message": self.signal_data.get("message", ""),
+            "signal": self.signal_data.get("signal", ""),
+            "direction": self.signal_data.get("direction", ""),
             "x": round(scene_position.x(), 2),
             "y": round(scene_position.y(), 2),
             "meta": {
-                "frame_id": self.signal_data["frame_id"],
-                "start_bit": self.signal_data["start_bit"],
-                "length": self.signal_data["length"],
+                "frame_id": self.signal_data.get("frame_id", 0),
+                "start_bit": self.signal_data.get("start_bit", 0),
+                "length": self.signal_data.get("length", 0),
                 "byte_order": self.signal_data.get("byte_order", "big_endian"),
             },
         }
+        if is_custom:
+            export_data["target_variable"] = self.signal_data.get("target_variable", "")
+            export_data["description"] = self.signal_data.get("description", "")
+            export_data["source_message"] = self.signal_data.get("source_message", "")
+            export_data["source_signal"] = self.signal_data.get("source_signal", "")
+            export_data["mapping_table"] = self.signal_data.get("mapping_table", [])
         if self.has_condition():
             cond = dict(self.signal_data["condition"])
             cond["shown"] = self._is_condition_shown()

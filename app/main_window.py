@@ -20,8 +20,17 @@ from PySide6.QtWidgets import (
 )
 
 from app.dbc_loader import load_dbc_document
-from app.json_exporter import export_canvas_json, load_canvas_json
+from app.json_exporter import (
+    export_canvas_json,
+    export_custom_nodes_json,
+    load_canvas_json,
+    load_custom_nodes_json,
+    custom_node_to_canvas_dict,
+    canvas_dict_to_custom_node,
+)
+from app.models import CustomNode, MappingEntry
 from app.state import AppState
+from app.widgets.custom_node_dialog import CustomNodeDialog
 from app.widgets.dbc_tree import DbcTreeWidget
 from app.widgets.node_canvas import NodeCanvasView
 
@@ -60,6 +69,15 @@ class MainWindow(QMainWindow):
         self.export_action.setShortcut(QKeySequence.StandardKey.Save)
         self.export_action.setStatusTip("Export the current canvas JSON")
         self.export_action.triggered.connect(self.export_json)
+
+        self.import_custom_nodes_action = QAction("Import Custom Nodes", self)
+        self.import_custom_nodes_action.setShortcut(QKeySequence("Ctrl+Shift+N"))
+        self.import_custom_nodes_action.setStatusTip("Import custom mapping nodes from file")
+        self.import_custom_nodes_action.triggered.connect(self._import_custom_nodes)
+
+        self.export_custom_nodes_action = QAction("Export Custom Nodes", self)
+        self.export_custom_nodes_action.setStatusTip("Export custom mapping nodes to file")
+        self.export_custom_nodes_action.triggered.connect(self._export_custom_nodes)
 
         self.clear_action = QAction("Clear Canvas", self)
         self.clear_action.setShortcut(QKeySequence("Ctrl+Shift+L"))
@@ -133,6 +151,9 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.import_json_action)
         file_menu.addAction(self.export_action)
         file_menu.addSeparator()
+        file_menu.addAction(self.import_custom_nodes_action)
+        file_menu.addAction(self.export_custom_nodes_action)
+        file_menu.addSeparator()
         file_menu.addAction(self.clear_action)
         file_menu.addSeparator()
         file_menu.addAction(self.convert_action)
@@ -161,6 +182,9 @@ class MainWindow(QMainWindow):
         self.dbc_tree.signal_activated.connect(self._add_signal_from_tree)
         self.dbc_tree.message_activated.connect(self._add_message_from_tree)
         self.node_canvas.content_changed.connect(self._on_canvas_changed)
+        self.dbc_tree.create_custom_node_requested.connect(self._create_custom_node)
+        self.dbc_tree.edit_custom_node_requested.connect(self._edit_custom_node)
+        self.dbc_tree.delete_custom_node_requested.connect(self._delete_custom_node)
 
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(8, 8, 8, 8)
@@ -297,6 +321,25 @@ class MainWindow(QMainWindow):
             )
         self.state.current_canvas_file = file_path
         self.state.has_unsaved_changes = False
+
+        for data in payload.get("custom_nodes", []):
+            mapping = [MappingEntry(dbc_value=m["dbc_value"], radar_value=m["radar_value"]) for m in data.get("mapping_table", [])]
+            node = CustomNode(
+                id=data.get("id", ""),
+                name=data.get("name", ""),
+                target_variable=data.get("target_variable", ""),
+                description=data.get("description", ""),
+                source_message=data.get("source_message", ""),
+                source_signal=data.get("source_signal", ""),
+                mapping_table=mapping,
+                frame_id=data.get("frame_id", 0),
+                start_bit=data.get("start_bit", 0),
+                length=data.get("length", 8),
+                byte_order=data.get("byte_order", "big_endian"),
+            )
+            self.state.custom_nodes.append(node)
+            self.dbc_tree.add_custom_node(node)
+
         self._update_title()
 
         status_message = f"Loaded {len(payload['nodes'])} canvas nodes from {Path(file_path).name}."
@@ -319,6 +362,21 @@ class MainWindow(QMainWindow):
             return
 
         try:
+            custom_nodes_export = []
+            for node in self.state.custom_nodes:
+                custom_nodes_export.append(canvas_dict_to_custom_node({
+                    "id": node.id,
+                    "signal": node.name,
+                    "target_variable": node.target_variable,
+                    "description": node.description,
+                    "source_message": node.source_message,
+                    "source_signal": node.source_signal,
+                    "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+                    "frame_id": node.frame_id,
+                    "start_bit": node.start_bit,
+                    "length": node.length,
+                    "byte_order": node.byte_order,
+                }))
             export_canvas_json(
                 file_path=file_path,
                 dbc_file=(
@@ -327,6 +385,7 @@ class MainWindow(QMainWindow):
                     else None
                 ),
                 nodes=self.node_canvas.export_nodes(),
+                custom_nodes=custom_nodes_export if custom_nodes_export else None,
             )
         except Exception as exc:
             QMessageBox.critical(self, "Export Failed", str(exc))
@@ -386,6 +445,106 @@ class MainWindow(QMainWindow):
         self.state.has_unsaved_changes = True
         self._update_title()
         self.statusBar().showMessage("Canvas cleared.")
+
+    def _create_custom_node(self) -> None:
+        node = CustomNodeDialog.get_custom_node(self)
+        if node:
+            self.state.custom_nodes.append(node)
+            self.dbc_tree.add_custom_node(node)
+            self.state.has_unsaved_changes = True
+            self._update_title()
+            self.statusBar().showMessage(f"Created custom node: {node.name}")
+
+    def _edit_custom_node(self, node_id: str) -> None:
+        node = next((n for n in self.state.custom_nodes if n.id == node_id), None)
+        if not node:
+            return
+        updated = CustomNodeDialog.get_custom_node(self, current_node=node)
+        if updated:
+            idx = next(i for i, n in enumerate(self.state.custom_nodes) if n.id == node_id)
+            self.state.custom_nodes[idx] = updated
+            self.dbc_tree.update_custom_node(updated)
+            self.node_canvas.update_custom_node_data(updated)
+            self.state.has_unsaved_changes = True
+            self._update_title()
+
+    def _delete_custom_node(self, node_id: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "Delete Custom Node",
+            "Are you sure you want to delete this custom node?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.state.custom_nodes = [n for n in self.state.custom_nodes if n.id != node_id]
+            self.dbc_tree.remove_custom_node(node_id)
+            self.node_canvas.remove_custom_node_by_id(node_id)
+            self.state.has_unsaved_changes = True
+            self._update_title()
+
+    def _import_custom_nodes(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Import Custom Nodes", "",
+            "Custom Node Files (*.custom.json);;All Files (*.*)",
+        )
+        if not file_path:
+            return
+        try:
+            nodes_data = load_custom_nodes_json(file_path)
+            for data in nodes_data:
+                canvas_dict = custom_node_to_canvas_dict(data)
+                mapping = [MappingEntry(dbc_value=m["dbc_value"], radar_value=m["radar_value"]) for m in data.get("mapping_table", [])]
+                node = CustomNode(
+                    id=data.get("id", ""),
+                    name=data.get("name", ""),
+                    target_variable=data.get("target_variable", ""),
+                    description=data.get("description", ""),
+                    source_message=data.get("source_message", ""),
+                    source_signal=data.get("source_signal", ""),
+                    mapping_table=mapping,
+                    frame_id=data.get("frame_id", 0),
+                    start_bit=data.get("start_bit", 0),
+                    length=data.get("length", 8),
+                    byte_order=data.get("byte_order", "big_endian"),
+                )
+                self.state.custom_nodes.append(node)
+                self.dbc_tree.add_custom_node(node)
+            self.state.has_unsaved_changes = True
+            self._update_title()
+            self.statusBar().showMessage(f"Imported {len(nodes_data)} custom nodes.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Import Failed", str(exc))
+
+    def _export_custom_nodes(self) -> None:
+        if not self.state.custom_nodes:
+            QMessageBox.information(self, "No Custom Nodes", "No custom nodes to export.")
+            return
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Custom Nodes", "custom_nodes.custom.json",
+            "Custom Node Files (*.custom.json)",
+        )
+        if not file_path:
+            return
+        try:
+            nodes_data = []
+            for node in self.state.custom_nodes:
+                nodes_data.append({
+                    "id": node.id,
+                    "name": node.name,
+                    "target_variable": node.target_variable,
+                    "description": node.description,
+                    "source_message": node.source_message,
+                    "source_signal": node.source_signal,
+                    "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+                    "frame_id": node.frame_id,
+                    "start_bit": node.start_bit,
+                    "length": node.length,
+                    "byte_order": node.byte_order,
+                })
+            export_custom_nodes_json(file_path, nodes_data)
+            self.statusBar().showMessage(f"Exported {len(self.state.custom_nodes)} custom nodes.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Failed", str(exc))
 
     def _add_signal_from_tree(self, payload: dict) -> None:
         x, y = self._next_tree_drop_position()

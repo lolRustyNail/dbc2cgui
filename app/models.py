@@ -4,6 +4,27 @@ from dataclasses import dataclass, field
 
 
 @dataclass(slots=True)
+class MappingEntry:
+    dbc_value: str
+    radar_value: str
+
+
+@dataclass(slots=True)
+class CustomNode:
+    id: str
+    name: str
+    target_variable: str
+    description: str = ""
+    source_message: str = ""
+    source_signal: str = ""
+    mapping_table: list[MappingEntry] = field(default_factory=list)
+    frame_id: int = 0
+    start_bit: int = 0
+    length: int = 8
+    byte_order: str = "big_endian"
+
+
+@dataclass(slots=True)
 class DbcSignal:
     name: str
     start_bit: int

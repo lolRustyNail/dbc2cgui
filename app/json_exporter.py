@@ -11,6 +11,7 @@ def export_canvas_json(
     file_path: str,
     dbc_file: str | None,
     nodes: list[dict],
+    custom_nodes: list[dict] | None = None,
 ) -> None:
     """Export the canvas state as a self-contained JSON document.
 
@@ -26,6 +27,8 @@ def export_canvas_json(
         "dbc_file": dbc_file,
         "messages": messages,
     }
+    if custom_nodes:
+        payload["custom_nodes"] = custom_nodes
     Path(file_path).write_text(
         json.dumps(payload, indent=2, ensure_ascii=False, default=_json_default),
         encoding="utf-8",
@@ -51,9 +54,12 @@ def load_canvas_json(file_path: str) -> dict:
             raise ValueError("Canvas JSON field 'nodes' must be a list.")
         nodes = [_normalize_node(node, idx) for idx, node in enumerate(raw_nodes, start=1)]
 
+    custom_nodes = payload.get("custom_nodes", [])
+
     return {
         "dbc_file": dbc_file,
         "nodes": nodes,
+        "custom_nodes": custom_nodes,
     }
 
 
@@ -468,3 +474,76 @@ def _normalize_condition(condition: object, index: int) -> dict:
     if source_y is not None:
         normalized["source_y"] = float(source_y)
     return normalized
+
+
+# ---------------------------------------------------------------------------
+# Custom nodes distribution file support
+# ---------------------------------------------------------------------------
+
+CUSTOM_NODES_SCHEMA_VERSION = 1
+
+
+def export_custom_nodes_json(file_path: str, custom_nodes: list[dict]) -> None:
+    """Export custom mapping nodes to a standalone distribution file."""
+    payload = {
+        "version": CUSTOM_NODES_SCHEMA_VERSION,
+        "custom_nodes": custom_nodes,
+    }
+    Path(file_path).write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, default=_json_default),
+        encoding="utf-8",
+    )
+
+
+def load_custom_nodes_json(file_path: str) -> list[dict]:
+    """Load custom mapping nodes from a distribution file."""
+    payload = json.loads(Path(file_path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Custom nodes file root must be an object.")
+    version = payload.get("version", 1)
+    if not isinstance(version, int) or version < 1:
+        raise ValueError(f"Unsupported custom nodes file version: {version}")
+    custom_nodes = payload.get("custom_nodes", [])
+    if not isinstance(custom_nodes, list):
+        raise ValueError("Custom nodes file field 'custom_nodes' must be a list.")
+    return custom_nodes
+
+
+def custom_node_to_canvas_dict(node: dict) -> dict:
+    """Convert a custom node from distribution/JSON format to canvas payload."""
+    mapping_table = node.get("mapping_table", [])
+    return {
+        "id": node.get("id", ""),
+        "type": "custom",
+        "node": "CUSTOM",
+        "direction": "custom",
+        "message": "",
+        "frame_id": node.get("frame_id", 0),
+        "signal": node.get("name", ""),
+        "start_bit": node.get("start_bit", 0),
+        "length": node.get("length", 8),
+        "byte_order": node.get("byte_order", "big_endian"),
+        "target_variable": node.get("target_variable", ""),
+        "description": node.get("description", ""),
+        "source_message": node.get("source_message", ""),
+        "source_signal": node.get("source_signal", ""),
+        "mapping_table": [{"dbc_value": m.get("dbc_value", ""), "radar_value": m.get("radar_value", "")} for m in mapping_table],
+    }
+
+
+def canvas_dict_to_custom_node(node: dict) -> dict:
+    """Convert a canvas custom node dict to distribution/JSON format."""
+    mapping_table = node.get("mapping_table", [])
+    return {
+        "id": node.get("id", ""),
+        "name": node.get("signal", ""),
+        "target_variable": node.get("target_variable", ""),
+        "description": node.get("description", ""),
+        "source_message": node.get("source_message", ""),
+        "source_signal": node.get("source_signal", ""),
+        "mapping_table": [{"dbc_value": m.get("dbc_value", ""), "radar_value": m.get("radar_value", "")} for m in mapping_table],
+        "frame_id": node.get("frame_id", 0),
+        "start_bit": node.get("start_bit", 0),
+        "length": node.get("length", 8),
+        "byte_order": node.get("byte_order", "big_endian"),
+    }

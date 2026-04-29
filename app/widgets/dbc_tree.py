@@ -7,6 +7,7 @@ from PySide6.QtCore import QMimeData, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QMenu,
     QStyle,
     QStyleOptionViewItem,
     QStyledItemDelegate,
@@ -14,7 +15,7 @@ from PySide6.QtWidgets import (
     QTreeWidgetItem,
 )
 
-from app.models import DbcDocument, DbcMessage, DbcNodeMessages, DbcSignal
+from app.models import CustomNode, DbcDocument, DbcMessage, DbcNodeMessages, DbcSignal
 
 
 class TreeFilterHighlightDelegate(QStyledItemDelegate):
@@ -90,6 +91,9 @@ class DbcTreeWidget(QTreeWidget):
     ROLE_PAYLOAD = Qt.ItemDataRole.UserRole + 1
     signal_activated = Signal(dict)
     message_activated = Signal(list)
+    create_custom_node_requested = Signal()
+    edit_custom_node_requested = Signal(str)
+    delete_custom_node_requested = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -100,6 +104,12 @@ class DbcTreeWidget(QTreeWidget):
         self.setDragEnabled(True)
         self.setItemDelegate(TreeFilterHighlightDelegate(self))
         self.itemDoubleClicked.connect(self._handle_item_activation)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._context_menu)
+        self._custom_root = QTreeWidgetItem(["Custom Nodes"])
+        self._custom_root.setData(0, self.ROLE_KIND, "custom_root")
+        self.addTopLevelItem(self._custom_root)
+        self._custom_root.setExpanded(True)
 
     @property
     def filter_text(self) -> str:
@@ -117,6 +127,11 @@ class DbcTreeWidget(QTreeWidget):
         root_item.setExpanded(True)
         for index in range(root_item.childCount()):
             root_item.child(index).setExpanded(True)
+
+        self._custom_root = QTreeWidgetItem(["Custom Nodes"])
+        self._custom_root.setData(0, self.ROLE_KIND, "custom_root")
+        self.addTopLevelItem(self._custom_root)
+        self._custom_root.setExpanded(True)
 
         self.apply_filter(self._filter_text)
 
@@ -156,6 +171,75 @@ class DbcTreeWidget(QTreeWidget):
 
     def supportedDragActions(self) -> Qt.DropAction:
         return Qt.DropAction.CopyAction
+
+    def _context_menu(self, pos) -> None:
+        item = self.itemAt(pos)
+        menu = QMenu(self)
+        if item is None or item.data(0, self.ROLE_KIND) == "custom_root":
+            create_action = menu.addAction("New Custom Node")
+            chosen = menu.exec(self.viewport().mapToGlobal(pos))
+            if chosen == create_action:
+                self.create_custom_node_requested.emit()
+            return
+        if item.data(0, self.ROLE_KIND) == "custom":
+            edit_action = menu.addAction("Edit")
+            delete_action = menu.addAction("Delete")
+            chosen = menu.exec(self.viewport().mapToGlobal(pos))
+            payload = item.data(0, self.ROLE_PAYLOAD)
+            node_id = payload.get("id", "") if payload else ""
+            if chosen == edit_action:
+                self.edit_custom_node_requested.emit(node_id)
+            elif chosen == delete_action:
+                self.delete_custom_node_requested.emit(node_id)
+
+    def add_custom_node(self, node: CustomNode) -> None:
+        payload = self._custom_node_to_payload(node)
+        item = QTreeWidgetItem([node.name])
+        item.setData(0, self.ROLE_KIND, "custom")
+        item.setData(0, self.ROLE_PAYLOAD, payload)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsDragEnabled)
+        self._custom_root.addChild(item)
+        self._custom_root.setExpanded(True)
+
+    def update_custom_node(self, node: CustomNode) -> None:
+        for i in range(self._custom_root.childCount()):
+            child = self._custom_root.child(i)
+            payload = child.data(0, self.ROLE_PAYLOAD)
+            if payload and payload.get("id") == node.id:
+                child.setText(0, node.name)
+                child.setData(0, self.ROLE_PAYLOAD, self._custom_node_to_payload(node))
+                break
+
+    def remove_custom_node(self, node_id: str) -> None:
+        for i in range(self._custom_root.childCount()):
+            child = self._custom_root.child(i)
+            payload = child.data(0, self.ROLE_PAYLOAD)
+            if payload and payload.get("id") == node_id:
+                self._custom_root.removeChild(child)
+                break
+
+    def load_custom_nodes(self, nodes: list[CustomNode]) -> None:
+        for node in nodes:
+            self.add_custom_node(node)
+
+    def _custom_node_to_payload(self, node: CustomNode) -> dict:
+        return {
+            "id": node.id,
+            "type": "custom",
+            "node": "CUSTOM",
+            "direction": "custom",
+            "message": "",
+            "frame_id": node.frame_id,
+            "signal": node.name,
+            "start_bit": node.start_bit,
+            "length": node.length,
+            "byte_order": node.byte_order,
+            "target_variable": node.target_variable,
+            "description": node.description,
+            "source_message": node.source_message,
+            "source_signal": node.source_signal,
+            "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+        }
 
     def _handle_item_activation(self, item: QTreeWidgetItem, column: int) -> None:
         del column

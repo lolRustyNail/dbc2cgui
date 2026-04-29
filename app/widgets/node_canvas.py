@@ -529,6 +529,11 @@ class NodeCanvasView(QGraphicsView):
                 if self._condition_link_for_target(item) is not None:
                     self._hide_condition_dependency(item)
                     self._show_condition_dependency(item)
+                if item.signal_data.get("type") == "custom":
+                    item.signal_data["source_message"] = condition.get("source_message", "")
+                    item.signal_data["source_signal"] = condition.get("source_signal", "")
+                    item._build_text()
+                    item.setToolTip(item._dialog_text())
             self.content_changed.emit()
 
     def _show_condition_dependency(self, target_item: SignalNodeItem) -> None:
@@ -710,6 +715,31 @@ class NodeCanvasView(QGraphicsView):
             if isinstance(scene_item, ConditionLinkItem):
                 scene_item.update_path()
         self.viewport().update()
+
+    def update_custom_node_data(self, node) -> None:
+        for item in self._scene.items():
+            if isinstance(item, SignalNodeItem) and item.node_id == node.id:
+                item.signal_data.update({
+                    "signal": node.name,
+                    "target_variable": node.target_variable,
+                    "description": node.description,
+                    "source_message": node.source_message,
+                    "source_signal": node.source_signal,
+                    "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+                    "frame_id": node.frame_id,
+                    "start_bit": node.start_bit,
+                    "length": node.length,
+                    "byte_order": node.byte_order,
+                })
+                item._build_text()
+                item.setToolTip(item._dialog_text())
+                break
+
+    def remove_custom_node_by_id(self, node_id: str) -> None:
+        for item in list(self._scene.items()):
+            if isinstance(item, SignalNodeItem) and item.node_id == node_id:
+                self._remove_signal_item(item)
+                break
 
     def snap_point(self, x: float, y: float) -> tuple[float, float]:
         return SignalNodeItem.snap_value(x), SignalNodeItem.snap_value(y)
