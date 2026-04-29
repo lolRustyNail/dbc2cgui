@@ -131,9 +131,5 @@ class CustomNodeDialog(QDialog):
             source_message=source_message,
             source_signal=source_signal,
             mapping_table=mapping_table,
-            frame_id=self._current_node.frame_id if self._current_node else 0,
-            start_bit=self._current_node.start_bit if self._current_node else 0,
-            length=self._current_node.length if self._current_node else 8,
-            byte_order=self._current_node.byte_order if self._current_node else "big_endian",
         )
         self.accept()

@@ -55,9 +55,7 @@ class SignalNodeItem(QGraphicsRectItem):
             source_sig = self.signal_data.get("source_signal", "")
             source_text = f"{source_msg}.{source_sig}" if source_msg and source_sig else "(not connected)"
             detail_lines = [
-                f"Target: {self.signal_data.get('target_variable', '')}",
                 f"Source: {source_text}",
-                f"Length: {self.signal_data.get('length', 8)}",
             ]
             mappings = self.signal_data.get("mapping_table", [])
             if mappings:
@@ -157,10 +155,7 @@ class SignalNodeItem(QGraphicsRectItem):
         if self.signal_data.get("type") == "custom":
             lines = [
                 f"Custom Node: {self.signal_data.get('signal', '')}",
-                f"Target Variable: {self.signal_data.get('target_variable', '')}",
                 f"Description: {self.signal_data.get('description', '')}",
-                f"Length: {self.signal_data.get('length', 8)}",
-                f"Byte Order: {self.signal_data.get('byte_order', 'big_endian')}",
             ]
             source_msg = self.signal_data.get("source_message", "")
             source_sig = self.signal_data.get("source_signal", "")

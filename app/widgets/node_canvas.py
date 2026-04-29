@@ -726,10 +726,6 @@ class NodeCanvasView(QGraphicsView):
                     "source_message": node.source_message,
                     "source_signal": node.source_signal,
                     "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
-                    "frame_id": node.frame_id,
-                    "start_bit": node.start_bit,
-                    "length": node.length,
-                    "byte_order": node.byte_order,
                 })
                 item._build_text()
                 item.setToolTip(item._dialog_text())

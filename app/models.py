@@ -18,10 +18,6 @@ class CustomNode:
     source_message: str = ""
     source_signal: str = ""
     mapping_table: list[MappingEntry] = field(default_factory=list)
-    frame_id: int = 0
-    start_bit: int = 0
-    length: int = 8
-    byte_order: str = "big_endian"
 
 
 @dataclass(slots=True)

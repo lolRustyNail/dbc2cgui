@@ -332,10 +332,6 @@ class MainWindow(QMainWindow):
                 source_message=data.get("source_message", ""),
                 source_signal=data.get("source_signal", ""),
                 mapping_table=mapping,
-                frame_id=data.get("frame_id", 0),
-                start_bit=data.get("start_bit", 0),
-                length=data.get("length", 8),
-                byte_order=data.get("byte_order", "big_endian"),
             )
             self.state.custom_nodes.append(node)
             self.dbc_tree.add_custom_node(node)
@@ -502,10 +498,6 @@ class MainWindow(QMainWindow):
                     source_message=data.get("source_message", ""),
                     source_signal=data.get("source_signal", ""),
                     mapping_table=mapping,
-                    frame_id=data.get("frame_id", 0),
-                    start_bit=data.get("start_bit", 0),
-                    length=data.get("length", 8),
-                    byte_order=data.get("byte_order", "big_endian"),
                 )
                 self.state.custom_nodes.append(node)
                 self.dbc_tree.add_custom_node(node)
@@ -536,10 +528,6 @@ class MainWindow(QMainWindow):
                     "source_message": node.source_message,
                     "source_signal": node.source_signal,
                     "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
-                    "frame_id": node.frame_id,
-                    "start_bit": node.start_bit,
-                    "length": node.length,
-                    "byte_order": node.byte_order,
                 })
             export_custom_nodes_json(file_path, nodes_data)
             self.statusBar().showMessage(f"Exported {len(self.state.custom_nodes)} custom nodes.")
