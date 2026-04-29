@@ -362,3 +362,33 @@ class SignalNodeItem(QGraphicsRectItem):
                 cond["source_y"] = round(source_pos.y(), 2)
             export_data["condition"] = cond
         return export_data
+
+    def edge_at(self, scene_pos, margin: float = 15.0):
+        local = self.mapFromScene(scene_pos)
+        x, y = local.x(), local.y()
+        w, h = self.WIDTH, self.HEIGHT
+
+        on_left = 0 <= x <= margin
+        on_right = (w - margin) <= x <= w
+        on_top = 0 <= y <= margin
+        on_bottom = (h - margin) <= y <= h
+
+        if on_left:
+            return "left"
+        if on_right:
+            return "right"
+        if on_top:
+            return "top"
+        if on_bottom:
+            return "bottom"
+        return None
+
+    def edge_anchor_point(self, edge: str):
+        from PySide6.QtCore import QPointF
+        local = {
+            "left": QPointF(0, self.HEIGHT / 2),
+            "right": QPointF(self.WIDTH, self.HEIGHT / 2),
+            "top": QPointF(self.WIDTH / 2, 0),
+            "bottom": QPointF(self.WIDTH / 2, self.HEIGHT),
+        }[edge]
+        return self.mapToScene(local)

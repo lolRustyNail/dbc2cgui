@@ -338,6 +338,13 @@ class MainWindow(QMainWindow):
             self.state.custom_nodes.append(node)
             self.dbc_tree.add_custom_node(node)
 
+        for data in payload.get("links", []):
+            source_id = data.get("source_id", "")
+            target_id = data.get("target_id", "")
+            label = data.get("label", "")
+            link_id = data.get("id", "")
+            self.node_canvas.add_link(source_id, target_id, label, link_id)
+
         self._update_title()
 
         status_message = f"Loaded {len(payload['nodes'])} canvas nodes from {Path(file_path).name}."
@@ -384,6 +391,7 @@ class MainWindow(QMainWindow):
                 ),
                 nodes=self.node_canvas.export_nodes(),
                 custom_nodes=custom_nodes_export if custom_nodes_export else None,
+                links=self.node_canvas.export_links() or None,
             )
         except Exception as exc:
             QMessageBox.critical(self, "Export Failed", str(exc))
@@ -716,6 +724,19 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+        links_json = self._settings.value("links", "")
+        if links_json:
+            try:
+                links_data = json.loads(links_json)
+                for data in links_data:
+                    source_id = data.get("source_id", "")
+                    target_id = data.get("target_id", "")
+                    label = data.get("label", "")
+                    link_id = data.get("id", "")
+                    self.node_canvas.add_link(source_id, target_id, label, link_id)
+            except Exception:
+                pass
+
     def _save_window_state(self) -> None:
         self._settings.setValue("window/geometry", self.saveGeometry())
         self._settings.setValue("window/splitter_sizes", self._splitter.sizes())
@@ -735,6 +756,8 @@ class MainWindow(QMainWindow):
                 "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
             })
         self._settings.setValue("custom_nodes", json.dumps(custom_nodes_data))
+        links_data = self.node_canvas.export_links()
+        self._settings.setValue("links", json.dumps(links_data))
 
     def closeEvent(self, event) -> None:
         if self.state.has_unsaved_changes:

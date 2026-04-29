@@ -12,6 +12,7 @@ def export_canvas_json(
     dbc_file: str | None,
     nodes: list[dict],
     custom_nodes: list[dict] | None = None,
+    links: list[dict] | None = None,
 ) -> None:
     """Export the canvas state as a self-contained JSON document.
 
@@ -29,6 +30,8 @@ def export_canvas_json(
     }
     if custom_nodes:
         payload["custom_nodes"] = custom_nodes
+    if links:
+        payload["links"] = links
     Path(file_path).write_text(
         json.dumps(payload, indent=2, ensure_ascii=False, default=_json_default),
         encoding="utf-8",
@@ -55,11 +58,13 @@ def load_canvas_json(file_path: str) -> dict:
         nodes = [_normalize_node(node, idx) for idx, node in enumerate(raw_nodes, start=1)]
 
     custom_nodes = payload.get("custom_nodes", [])
+    links = payload.get("links", [])
 
     return {
         "dbc_file": dbc_file,
         "nodes": nodes,
         "custom_nodes": custom_nodes,
+        "links": links,
     }
 
 

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView, QMen
 
 from app.widgets.condition_dialog import ConditionDialog
 from app.widgets.condition_link_item import ConditionLinkItem
+from app.widgets.link_item import LinkItem
 from app.widgets.signal_node_item import SignalNodeItem
 
 
@@ -35,6 +36,12 @@ class NodeCanvasView(QGraphicsView):
         self._move_snapshot: dict | None = None
         self._move_start_positions: dict[str, tuple[float, float]] = {}
         self._condition_links: list[ConditionLinkItem] = []
+        self._links: list[LinkItem] = []
+        self._is_connecting = False
+        self._connect_source_item: SignalNodeItem | None = None
+        self._connect_source_edge: str | None = None
+        self._connect_source_pos = None
+        self._connect_current_pos = None
         self._scene.setSceneRect(-5000, -5000, 10000, 10000)
         self.setScene(self._scene)
         self.setAcceptDrops(True)
@@ -112,6 +119,11 @@ class NodeCanvasView(QGraphicsView):
         painter = QPainter(self.viewport())
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         self._draw_minimap(painter)
+        if self._is_connecting and self._connect_source_pos and self._connect_current_pos:
+            v1 = self.mapFromScene(self._connect_source_pos)
+            v2 = self.mapFromScene(self._connect_current_pos)
+            painter.setPen(QPen(QColor("#3b82f6"), 2, Qt.PenStyle.DashLine))
+            painter.drawLine(v1, v2)
         painter.end()
 
     def _minimap_navigate(self, viewport_pos: QPoint) -> None:
@@ -253,6 +265,18 @@ class NodeCanvasView(QGraphicsView):
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton:
+            item = self._signal_item_at(event.position().toPoint())
+            if item is not None:
+                scene_pos = self.mapToScene(event.position().toPoint())
+                edge = item.edge_at(scene_pos)
+                if edge is not None:
+                    self._is_connecting = True
+                    self._connect_source_item = item
+                    self._connect_source_edge = edge
+                    self._connect_source_pos = item.edge_anchor_point(edge)
+                    self._connect_current_pos = self._connect_source_pos
+                    event.accept()
+                    return
             self._capture_move_start(event.position().toPoint())
         super().mousePressEvent(event)
 
@@ -268,6 +292,11 @@ class NodeCanvasView(QGraphicsView):
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
             event.accept()
             return
+        if self._is_connecting:
+            self._connect_current_pos = self.mapToScene(event.position().toPoint())
+            self.viewport().update()
+            event.accept()
+            return
         super().mouseMoveEvent(event)
         self._update_condition_links()
 
@@ -279,6 +308,17 @@ class NodeCanvasView(QGraphicsView):
         if event.button() == Qt.MouseButton.MiddleButton and self._is_panning:
             self._is_panning = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
+            event.accept()
+            return
+        if self._is_connecting:
+            self._is_connecting = False
+            scene_pos = self.mapToScene(event.position().toPoint())
+            target_item = self._signal_item_at(event.position().toPoint())
+            if target_item is not None and target_item is not self._connect_source_item:
+                self._finalize_link(self._connect_source_item, target_item)
+            self._connect_source_item = None
+            self._connect_current_pos = None
+            self.viewport().update()
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -736,6 +776,23 @@ class NodeCanvasView(QGraphicsView):
             if isinstance(scene_item, ConditionLinkItem):
                 scene_item.update_path()
         self.viewport().update()
+
+    def _finalize_link(self, source: SignalNodeItem, target: SignalNodeItem) -> None:
+        link = LinkItem(source, target, label="")
+        self._scene.addItem(link)
+        self._links.append(link)
+        self.content_changed.emit()
+
+    def add_link(self, source_id: str, target_id: str, label: str = "", link_id: str = "") -> None:
+        source = self._find_node_by_id(source_id)
+        target = self._find_node_by_id(target_id)
+        if source and target:
+            link = LinkItem(source, target, label=label, link_id=link_id)
+            self._scene.addItem(link)
+            self._links.append(link)
+
+    def export_links(self) -> list[dict]:
+        return [link.to_dict() for link in self._links]
 
     def update_custom_node_data(self, node) -> None:
         for item in self._scene.items():

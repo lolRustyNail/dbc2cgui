@@ -10,6 +10,14 @@ class MappingEntry:
 
 
 @dataclass(slots=True)
+class LinkData:
+    id: str
+    source_id: str
+    target_id: str
+    label: str = ""
+
+
+@dataclass(slots=True)
 class CustomNode:
     id: str
     name: str
