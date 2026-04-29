@@ -265,8 +265,9 @@ class NodeCanvasView(QGraphicsView):
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton:
+            mods = event.modifiers()
             item = self._signal_item_at(event.position().toPoint())
-            if item is not None:
+            if item is not None and (mods & Qt.KeyboardModifier.ControlModifier):
                 scene_pos = self.mapToScene(event.position().toPoint())
                 edge = item.edge_at(scene_pos)
                 if edge is not None:
