@@ -343,6 +343,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Import JSON Failed", str(exc))
             return
 
+        self.state.custom_nodes.clear()
         dbc_message = self._restore_document_from_canvas(payload.get("dbc_file"))
         self.dbc_search.clear()
         self.node_canvas.load_nodes(payload["nodes"])
@@ -695,7 +696,7 @@ class MainWindow(QMainWindow):
             return "DBC load failed; tree not restored."
 
         self.state.current_document = document
-        self.dbc_tree.load_document(document)
+        self.dbc_tree.load_document(document, self.state.custom_nodes)
         self.node_canvas.set_available_condition_sources(
             self._collect_condition_sources_from_document(document)
         )
