@@ -21,12 +21,14 @@ def export_canvas_json(
     available, so that downstream code generation can consume the JSON alone
     without re-reading the original .dbc file.
     """
-    messages = _build_messages_from_canvas(dbc_file, nodes)
+    messages, custom_nodes = _build_messages_and_custom_from_canvas(dbc_file, nodes)
     payload = {
         "version": SCHEMA_VERSION,
         "dbc_file": dbc_file,
         "messages": messages,
     }
+    if custom_nodes:
+        payload["custom_nodes"] = custom_nodes
     if links:
         payload["links"] = links
     Path(file_path).write_text(
@@ -60,6 +62,7 @@ def load_canvas_json(file_path: str) -> dict:
     return {
         "dbc_file": dbc_file,
         "nodes": nodes,
+        "custom_nodes": custom_nodes,
         "links": links,
     }
 
@@ -120,6 +123,15 @@ def _build_messages_from_canvas(dbc_file: str | None, canvas_nodes: list[dict]) 
         messages.append(message_entry)
 
     return messages
+
+
+def _build_messages_and_custom_from_canvas(dbc_file: str | None, canvas_nodes: list[dict]) -> tuple[list[dict], list[dict]]:
+    messages = _build_messages_from_canvas(dbc_file, canvas_nodes)
+    custom_nodes = []
+    for node in canvas_nodes:
+        if node.get("type") == "custom":
+            custom_nodes.append(node)
+    return messages, custom_nodes
 
 
 def _load_dbc_messages(dbc_file: str | None) -> dict:

@@ -323,6 +323,20 @@ class MainWindow(QMainWindow):
         self.state.current_canvas_file = file_path
         self.state.has_unsaved_changes = False
 
+        for data in payload.get("custom_nodes", []):
+            mapping = [MappingEntry(dbc_value=m["dbc_value"], radar_value=m["radar_value"]) for m in data.get("mapping_table", [])]
+            node = CustomNode(
+                id=data.get("id", ""),
+                name=data.get("name", ""),
+                target_variable=data.get("target_variable", ""),
+                description=data.get("description", ""),
+                source_message=data.get("source_message", ""),
+                source_signal=data.get("source_signal", ""),
+                mapping_table=mapping,
+            )
+            self.state.custom_nodes.append(node)
+            self.dbc_tree.add_custom_node(node)
+
         for data in payload.get("links", []):
             source_id = data.get("source_id", "")
             target_id = data.get("target_id", "")
