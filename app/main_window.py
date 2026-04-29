@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -695,6 +696,26 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+        custom_nodes_json = self._settings.value("custom_nodes", "")
+        if custom_nodes_json:
+            try:
+                custom_nodes_data = json.loads(custom_nodes_json)
+                for data in custom_nodes_data:
+                    mapping = [MappingEntry(dbc_value=m["dbc_value"], radar_value=m["radar_value"]) for m in data.get("mapping_table", [])]
+                    node = CustomNode(
+                        id=data.get("id", ""),
+                        name=data.get("name", ""),
+                        target_variable=data.get("target_variable", ""),
+                        description=data.get("description", ""),
+                        source_message=data.get("source_message", ""),
+                        source_signal=data.get("source_signal", ""),
+                        mapping_table=mapping,
+                    )
+                    self.state.custom_nodes.append(node)
+                self.dbc_tree.load_custom_nodes(self.state.custom_nodes)
+            except Exception:
+                pass
+
     def _save_window_state(self) -> None:
         self._settings.setValue("window/geometry", self.saveGeometry())
         self._settings.setValue("window/splitter_sizes", self._splitter.sizes())
@@ -702,6 +723,18 @@ class MainWindow(QMainWindow):
             self._settings.setValue("recent/last_dbc", self.state.current_document.file_path)
         else:
             self._settings.remove("recent/last_dbc")
+        custom_nodes_data = []
+        for node in self.state.custom_nodes:
+            custom_nodes_data.append({
+                "id": node.id,
+                "name": node.name,
+                "target_variable": node.target_variable,
+                "description": node.description,
+                "source_message": node.source_message,
+                "source_signal": node.source_signal,
+                "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+            })
+        self._settings.setValue("custom_nodes", json.dumps(custom_nodes_data))
 
     def closeEvent(self, event) -> None:
         if self.state.has_unsaved_changes:
