@@ -775,6 +775,8 @@ class NodeCanvasView(QGraphicsView):
         for scene_item in self._scene.items():
             if isinstance(scene_item, ConditionLinkItem):
                 scene_item.update_path()
+            elif isinstance(scene_item, LinkItem):
+                scene_item.update_path()
         self.viewport().update()
 
     def _finalize_link(self, source: SignalNodeItem, target: SignalNodeItem) -> None:
