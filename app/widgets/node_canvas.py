@@ -309,8 +309,14 @@ class NodeCanvasView(QGraphicsView):
 
         if signal_item is not None:
             signal_item.setSelected(True)
-            details_action = menu.addAction("View Details")
-            edit_condition_action = menu.addAction("Edit Receive Condition")
+            is_custom = signal_item.signal_data.get("type") == "custom"
+
+            if is_custom:
+                edit_custom_action = menu.addAction("Edit Custom Node")
+            else:
+                details_action = menu.addAction("View Details")
+                edit_condition_action = menu.addAction("Edit Receive Condition")
+
             show_dependency_action = None
             hide_dependency_action = None
             if signal_item.has_condition() and not signal_item.is_reference():
@@ -327,11 +333,16 @@ class NodeCanvasView(QGraphicsView):
             fit_action = menu.addAction("Fit Nodes")
             chosen_action = menu.exec(event.globalPos())
 
-            if chosen_action == details_action:
-                signal_item.show_details()
-            elif chosen_action == edit_condition_action:
-                self._edit_item_condition(signal_item)
-            elif show_dependency_action is not None and chosen_action == show_dependency_action:
+            if is_custom:
+                if chosen_action == edit_custom_action:
+                    self.custom_node_edit_requested.emit(signal_item.node_id)
+            else:
+                if chosen_action == details_action:
+                    signal_item.show_details()
+                elif chosen_action == edit_condition_action:
+                    self._edit_item_condition(signal_item)
+
+            if show_dependency_action is not None and chosen_action == show_dependency_action:
                 with self._batch_history():
                     self._show_condition_dependency(signal_item)
             elif hide_dependency_action is not None and chosen_action == hide_dependency_action:
