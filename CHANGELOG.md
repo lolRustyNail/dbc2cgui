@@ -5,6 +5,13 @@
 ## [Unreleased]
 
 ### Added
+- **转换脚本功能**:
+  - 支持加载自定义 Python 转换脚本（定义 `convert(canvas_data, output_dir)` 函数）。
+  - Tools 菜单：Load Converter Script (`Ctrl+Shift+L`)、Remove Converter Script、Convert (`Ctrl+G`)。
+  - 支持加载多个转换脚本，执行时弹出选择框。
+  - 转换在后台线程执行，显示进度条。
+  - 脚本路径通过 QSettings 持久化保存。
+  - 转换失败时显示详细错误堆栈。
 - **节点连线功能**:
   - 从节点边缘拖拽到目标节点创建连线。
   - 连线样式：实线 + 目标端箭头，靛蓝色。

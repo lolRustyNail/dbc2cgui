@@ -12,3 +12,4 @@ class AppState:
     has_unsaved_changes: bool = False
     custom_nodes: list[CustomNode] = field(default_factory=list)
     links: list[LinkData] = field(default_factory=list)
+    converter_scripts: list[str] = field(default_factory=list)

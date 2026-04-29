@@ -11,15 +11,19 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QInputDialog,
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressBar,
     QSplitter,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
+from app.converter import ConverterManager
+from app.convert_worker import ConvertWorker
 from app.dbc_loader import load_dbc_document
 from app.json_exporter import (
     export_canvas_json,
@@ -44,12 +48,15 @@ class MainWindow(QMainWindow):
         self.dbc_search = QLineEdit()
         self.dbc_tree = DbcTreeWidget()
         self.node_canvas = NodeCanvasView()
+        self.converter_manager = ConverterManager()
+        self._convert_worker: ConvertWorker | None = None
 
         self.setWindowTitle("DBC2C")
         self._settings = QSettings("DBC2C", "DBC2C")
 
         self._build_actions()
         self._build_layout()
+        self._build_progress_bar()
         self._build_shortcuts()
         self._restore_window_state()
         self.statusBar().showMessage("Import a DBC file to start building nodes.")
@@ -126,6 +133,15 @@ class MainWindow(QMainWindow):
         self.convert_action.setStatusTip("Convert current canvas to code")
         self.convert_action.triggered.connect(self._convert)
 
+        self.load_converter_action = QAction("Load Converter Script", self)
+        self.load_converter_action.setShortcut(QKeySequence("Ctrl+Shift+L"))
+        self.load_converter_action.setStatusTip("Load a Python converter script")
+        self.load_converter_action.triggered.connect(self._load_converter_script)
+
+        self.remove_converter_action = QAction("Remove Converter Script", self)
+        self.remove_converter_action.setStatusTip("Remove a loaded converter script")
+        self.remove_converter_action.triggered.connect(self._remove_converter_script)
+
         self.changelog_action = QAction("Changelog", self)
         self.changelog_action.setStatusTip("Show the application changelog")
         self.changelog_action.triggered.connect(self.show_changelog)
@@ -170,6 +186,12 @@ class MainWindow(QMainWindow):
         view_menu.addAction(self.fit_nodes_action)
         view_menu.addAction(self.reset_view_action)
 
+        tools_menu = self.menuBar().addMenu("Tools")
+        tools_menu.addAction(self.load_converter_action)
+        tools_menu.addAction(self.remove_converter_action)
+        tools_menu.addSeparator()
+        tools_menu.addAction(self.convert_action)
+
         info_menu = self.menuBar().addMenu("Info")
         info_menu.addAction(self.changelog_action)
         info_menu.addSeparator()
@@ -204,6 +226,14 @@ class MainWindow(QMainWindow):
         right_width = int(screen.width() * 0.63)
         self._splitter.setSizes([left_width, right_width])
         self.setCentralWidget(self._splitter)
+
+    def _build_progress_bar(self) -> None:
+        self._progress_bar = QProgressBar(self)
+        self._progress_bar.setMaximumWidth(300)
+        self._progress_bar.setMaximumHeight(16)
+        self._progress_bar.setTextVisible(True)
+        self._progress_bar.setVisible(False)
+        self.statusBar().addPermanentWidget(self._progress_bar)
 
     def _build_shortcuts(self) -> None:
         self.delete_shortcut = QShortcut(QKeySequence("Delete"), self.node_canvas)
@@ -386,31 +416,101 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Exported canvas JSON to {file_path}")
 
     def _convert(self) -> None:
-        """Convert the current canvas nodes to code.
+        script_path = self._select_converter()
+        if not script_path:
+            QMessageBox.information(
+                self, "No Converter",
+                "Please load a converter script first (Tools → Load Converter Script).",
+            )
+            return
 
-        This is a stub — fill in the actual conversion logic here.
-        `canvas_data` contains the full message-grouped JSON structure
-        (same as what Export JSON writes to disk).
-        `output_dir` is the directory the user selected for output.
-        """
         canvas_data = self._build_canvas_data()
-        if not canvas_data.get("messages"):
+        if not canvas_data.get("messages") and not canvas_data.get("custom_nodes"):
             self.statusBar().showMessage("Nothing to convert — canvas is empty.")
             return
 
-        output_dir = QFileDialog.getExistingDirectory(
-            self, "Select Output Directory"
-        )
+        output_dir = QFileDialog.getExistingDirectory(self, "Select Output Directory")
         if not output_dir:
-            self.statusBar().showMessage("Convert cancelled.")
             return
 
-        # TODO: implement conversion logic using canvas_data and output_dir
-        self.statusBar().showMessage(
-            f"Convert: received {len(canvas_data['messages'])} message(s) "
-            f"with {sum(len(m['signals']) for m in canvas_data['messages'])} signal(s). "
-            f"Output dir: {output_dir} (stub — no conversion logic yet)"
+        self.convert_action.setEnabled(False)
+        self._progress_bar.setMaximum(0)
+        self._progress_bar.setValue(0)
+        self._progress_bar.setVisible(True)
+        self.statusBar().showMessage("Conversion started...")
+
+        self._convert_worker = ConvertWorker(
+            canvas_data, output_dir, self.converter_manager, script_path, self
         )
+        self._convert_worker.progress.connect(self._on_convert_progress)
+        self._convert_worker.finished.connect(self._on_convert_finished)
+        self._convert_worker.start()
+
+    def _on_convert_progress(self, current: int, total: int, message: str) -> None:
+        if total > 0:
+            self._progress_bar.setMaximum(total)
+        self._progress_bar.setValue(current)
+        self.statusBar().showMessage(message)
+
+    def _on_convert_finished(self, success: bool, output_dir: str, error: str) -> None:
+        self._progress_bar.setVisible(False)
+        self.convert_action.setEnabled(True)
+        self._convert_worker = None
+
+        if success:
+            self.statusBar().showMessage(f"Conversion completed. Output: {output_dir}")
+            QMessageBox.information(
+                self, "Conversion Complete",
+                f"Conversion completed successfully.\n\nOutput:\n{output_dir}",
+            )
+        else:
+            self.statusBar().showMessage("Conversion failed.")
+            QMessageBox.critical(
+                self, "Conversion Failed",
+                f"An error occurred:\n\n{error}",
+            )
+
+    def _load_converter_script(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Load Converter Script", "",
+            "Python Files (*.py);;All Files (*.*)",
+        )
+        if not file_path:
+            return
+        try:
+            name = self.converter_manager.load_script(file_path)
+            if file_path not in self.state.converter_scripts:
+                self.state.converter_scripts.append(file_path)
+            self.statusBar().showMessage(f"Loaded converter: {name}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Load Failed", str(exc))
+
+    def _remove_converter_script(self) -> None:
+        scripts = self.converter_manager.get_scripts()
+        if not scripts:
+            QMessageBox.information(self, "No Scripts", "No converter scripts loaded.")
+            return
+        items = [f"{s['name']} ({s['path']})" for s in scripts]
+        item, ok = QInputDialog.getItem(self, "Remove Converter", "Select script:", items, 0, False)
+        if ok and item:
+            idx = items.index(item)
+            path = scripts[idx]["path"]
+            self.converter_manager.remove_script(path)
+            self.state.converter_scripts = [p for p in self.state.converter_scripts if p != path]
+            self.statusBar().showMessage(f"Removed converter: {scripts[idx]['name']}")
+
+    def _select_converter(self) -> str | None:
+        scripts = self.converter_manager.get_scripts()
+        if not scripts:
+            return None
+        if len(scripts) == 1:
+            return scripts[0]["path"]
+        items = [s["name"] for s in scripts]
+        item, ok = QInputDialog.getItem(self, "Select Converter", "Choose converter:", items, 0, False)
+        if ok and item:
+            idx = items.index(item)
+            return scripts[idx]["path"]
+        return None
 
     def _build_canvas_data(self) -> dict:
         """Build the full message-grouped canvas data dict (mirrors export JSON)."""
@@ -720,6 +820,17 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+        scripts_json = self._settings.value("converter_scripts", "")
+        if scripts_json:
+            try:
+                scripts = json.loads(scripts_json)
+                for path in scripts:
+                    if Path(path).exists():
+                        self.converter_manager.load_script(path)
+                        self.state.converter_scripts.append(path)
+            except Exception:
+                pass
+
     def _save_window_state(self) -> None:
         self._settings.setValue("window/geometry", self.saveGeometry())
         self._settings.setValue("window/splitter_sizes", self._splitter.sizes())
@@ -741,8 +852,13 @@ class MainWindow(QMainWindow):
         self._settings.setValue("custom_nodes", json.dumps(custom_nodes_data))
         links_data = self.node_canvas.export_links()
         self._settings.setValue("links", json.dumps(links_data))
+        self._settings.setValue("converter_scripts", json.dumps(self.state.converter_scripts))
 
     def closeEvent(self, event) -> None:
+        if self._convert_worker is not None and self._convert_worker.isRunning():
+            self._convert_worker.cancel()
+            self._convert_worker.wait(3000)
+
         if self.state.has_unsaved_changes:
             reply = QMessageBox.question(
                 self,
