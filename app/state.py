@@ -9,3 +9,4 @@ from app.models import DbcDocument
 class AppState:
     current_document: DbcDocument | None = None
     current_canvas_file: str | None = None
+    has_unsaved_changes: bool = False

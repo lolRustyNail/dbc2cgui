@@ -160,6 +160,7 @@ class MainWindow(QMainWindow):
         self.dbc_search.textChanged.connect(self.dbc_tree.apply_filter)
         self.dbc_tree.signal_activated.connect(self._add_signal_from_tree)
         self.dbc_tree.message_activated.connect(self._add_message_from_tree)
+        self.node_canvas.content_changed.connect(self._on_canvas_changed)
 
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(8, 8, 8, 8)
@@ -265,6 +266,7 @@ class MainWindow(QMainWindow):
         self.node_canvas.clear_canvas()
         self.node_canvas.clear_history()
         self.state.current_canvas_file = None
+        self.state.has_unsaved_changes = False
         self._update_title()
         self.statusBar().showMessage(
             f"Loaded {Path(file_path).name}. Drag signals to the canvas."
@@ -294,6 +296,7 @@ class MainWindow(QMainWindow):
                 self._collect_condition_sources_from_nodes(payload["nodes"])
             )
         self.state.current_canvas_file = file_path
+        self.state.has_unsaved_changes = False
         self._update_title()
 
         status_message = f"Loaded {len(payload['nodes'])} canvas nodes from {Path(file_path).name}."
@@ -330,6 +333,7 @@ class MainWindow(QMainWindow):
             return
 
         self.state.current_canvas_file = file_path
+        self.state.has_unsaved_changes = False
         self._update_title()
         self.statusBar().showMessage(f"Exported canvas JSON to {file_path}")
 
@@ -379,6 +383,8 @@ class MainWindow(QMainWindow):
             self.node_canvas.record_history()
         self.node_canvas.clear_canvas()
         self._tree_drop_offset = 0
+        self.state.has_unsaved_changes = True
+        self._update_title()
         self.statusBar().showMessage("Canvas cleared.")
 
     def _add_signal_from_tree(self, payload: dict) -> None:
@@ -501,12 +507,18 @@ class MainWindow(QMainWindow):
             )
         return sources
 
+    def _on_canvas_changed(self) -> None:
+        self.state.has_unsaved_changes = True
+        self._update_title()
+
     def _update_title(self) -> None:
         parts = ["DBC2C"]
         if self.state.current_document is not None:
             parts.append(Path(self.state.current_document.file_path).name)
         if self.state.current_canvas_file is not None:
             parts.append(Path(self.state.current_canvas_file).name)
+        if self.state.has_unsaved_changes:
+            parts.append("*")
         self.setWindowTitle(" - ".join(parts))
 
     def _restore_window_state(self) -> None:
@@ -544,6 +556,22 @@ class MainWindow(QMainWindow):
             self._settings.remove("recent/last_dbc")
 
     def closeEvent(self, event) -> None:
+        if self.state.has_unsaved_changes:
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before closing?",
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save,
+            )
+            if reply == QMessageBox.StandardButton.Save:
+                self.export_json()
+                if self.state.has_unsaved_changes:
+                    event.ignore()
+                    return
+            elif reply == QMessageBox.StandardButton.Cancel:
+                event.ignore()
+                return
         self._save_window_state()
         super().closeEvent(event)
 

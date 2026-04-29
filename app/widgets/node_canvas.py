@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from contextlib import contextmanager
 
-from PySide6.QtCore import QPoint, QRectF, Qt
+from PySide6.QtCore import QPoint, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QContextMenuEvent, QKeyEvent, QMouseEvent, QPainter, QPen, QBrush, QTransform, QWheelEvent
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView, QMenu, QMessageBox
 
@@ -13,6 +13,7 @@ from app.widgets.signal_node_item import SignalNodeItem
 
 
 class NodeCanvasView(QGraphicsView):
+    content_changed = Signal()
     MIME_TYPE = "application/x-dbc-signal"
     GRID_SIZE = SignalNodeItem.GRID_SIZE
     MIN_ZOOM = 0.35
@@ -151,6 +152,7 @@ class NodeCanvasView(QGraphicsView):
                 x, y = self.snap_point(x, y)
             item.setPos(x, y)
             self._scene.addItem(item)
+        self.content_changed.emit()
 
     def set_available_condition_sources(self, sources: list[dict]) -> None:
         unique_sources: list[dict] = []
@@ -460,6 +462,7 @@ class NodeCanvasView(QGraphicsView):
                 x += cols_needed * (node_w + h_gap) + group_gap
 
         self._update_condition_links()
+        self.content_changed.emit()
         self.fit_all_nodes()
 
     def delete_selected_items(self) -> None:
@@ -470,6 +473,7 @@ class NodeCanvasView(QGraphicsView):
             with self._batch_history():
                 for link in selected_links:
                     self._hide_condition_dependency(link.target_item)
+            self.content_changed.emit()
             return
 
         selected_signal_items = [
@@ -480,6 +484,7 @@ class NodeCanvasView(QGraphicsView):
         with self._batch_history():
             for item in selected_signal_items:
                 self._remove_signal_item(item)
+        self.content_changed.emit()
 
     def duplicate_selected_items(self) -> None:
         if any(isinstance(item, ConditionLinkItem) for item in self._scene.selectedItems()):
@@ -495,6 +500,7 @@ class NodeCanvasView(QGraphicsView):
         with self._batch_history():
             for item in selected_signal_items:
                 self._duplicate_item(item)
+        self.content_changed.emit()
 
     def _duplicate_item(self, item: SignalNodeItem) -> None:
         payload = item.to_node_payload(include_id=False)
@@ -523,6 +529,7 @@ class NodeCanvasView(QGraphicsView):
                 if self._condition_link_for_target(item) is not None:
                     self._hide_condition_dependency(item)
                     self._show_condition_dependency(item)
+            self.content_changed.emit()
 
     def _show_condition_dependency(self, target_item: SignalNodeItem) -> None:
         condition = target_item.signal_data.get("condition")
@@ -561,6 +568,7 @@ class NodeCanvasView(QGraphicsView):
                 self._condition_links.remove(link)
             if source_item.is_reference() and not self._has_links_for_item(source_item):
                 self._scene.removeItem(source_item)
+        self.content_changed.emit()
 
     def _condition_link_for_target(self, target_item: SignalNodeItem) -> ConditionLinkItem | None:
         for scene_item in self._scene.items():
@@ -807,6 +815,7 @@ class NodeCanvasView(QGraphicsView):
         state = self._undo_stack.pop()
         self._redo_stack.append(current)
         self._restore_state(state)
+        self.content_changed.emit()
 
     def redo(self) -> None:
         if not self._redo_stack:
@@ -815,6 +824,7 @@ class NodeCanvasView(QGraphicsView):
         state = self._redo_stack.pop()
         self._undo_stack.append(current)
         self._restore_state(state)
+        self.content_changed.emit()
 
     def _capture_move_start(self, view_pos: QPoint) -> None:
         item = self._signal_item_at(view_pos)
@@ -857,6 +867,7 @@ class NodeCanvasView(QGraphicsView):
         if len(self._undo_stack) > self.MAX_HISTORY:
             self._undo_stack.pop(0)
         self._redo_stack.clear()
+        self.content_changed.emit()
 
     def _find_node_by_id(self, node_id: str) -> SignalNodeItem | None:
         for scene_item in self._scene.items():
