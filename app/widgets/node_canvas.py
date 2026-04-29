@@ -14,6 +14,7 @@ from app.widgets.signal_node_item import SignalNodeItem
 
 class NodeCanvasView(QGraphicsView):
     content_changed = Signal()
+    custom_node_edit_requested = Signal(str)
     MIME_TYPE = "application/x-dbc-signal"
     GRID_SIZE = SignalNodeItem.GRID_SIZE
     MIN_ZOOM = 0.35
@@ -148,6 +149,8 @@ class NodeCanvasView(QGraphicsView):
     def add_signal_node(self, payload: dict, x: float, y: float, snap: bool = True) -> None:
         with self._batch_history():
             item = SignalNodeItem(payload)
+            if payload.get("type") == "custom":
+                item.edit_requested.connect(self.custom_node_edit_requested)
             if snap:
                 x, y = self.snap_point(x, y)
             item.setPos(x, y)

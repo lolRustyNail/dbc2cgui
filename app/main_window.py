@@ -185,6 +185,7 @@ class MainWindow(QMainWindow):
         self.dbc_tree.create_custom_node_requested.connect(self._create_custom_node)
         self.dbc_tree.edit_custom_node_requested.connect(self._edit_custom_node)
         self.dbc_tree.delete_custom_node_requested.connect(self._delete_custom_node)
+        self.node_canvas.custom_node_edit_requested.connect(self._edit_custom_node)
 
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(8, 8, 8, 8)
