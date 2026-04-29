@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QBrush, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
 
 
 class SignalNodeItem(QGraphicsRectItem):
-    edit_requested = Signal(str)
     GRID_SIZE = 24
     WIDTH = 350
     HEIGHT = 162
@@ -241,10 +240,7 @@ class SignalNodeItem(QGraphicsRectItem):
         painter.drawLine(12, 134, self.WIDTH - 12, 134)
 
     def mouseDoubleClickEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-        if self.signal_data.get("type") == "custom":
-            self.edit_requested.emit(self.node_id)
-        else:
-            self.show_details()
+        self.show_details()
         event.accept()
 
     def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:

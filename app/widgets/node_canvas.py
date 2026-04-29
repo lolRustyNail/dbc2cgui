@@ -149,8 +149,6 @@ class NodeCanvasView(QGraphicsView):
     def add_signal_node(self, payload: dict, x: float, y: float, snap: bool = True) -> None:
         with self._batch_history():
             item = SignalNodeItem(payload)
-            if payload.get("type") == "custom":
-                item.edit_requested.connect(self.custom_node_edit_requested)
             if snap:
                 x, y = self.snap_point(x, y)
             item.setPos(x, y)
@@ -295,6 +293,15 @@ class NodeCanvasView(QGraphicsView):
             event.accept()
             return
         super().wheelEvent(event)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            signal_item = self._signal_item_at(event.position().toPoint())
+            if signal_item is not None and signal_item.signal_data.get("type") == "custom":
+                self.custom_node_edit_requested.emit(signal_item.node_id)
+                event.accept()
+                return
+        super().mouseDoubleClickEvent(event)
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         signal_item = self._signal_item_at(event.pos())
