@@ -27,7 +27,6 @@ from app.json_exporter import (
     load_canvas_json,
     load_custom_nodes_json,
     custom_node_to_canvas_dict,
-    canvas_dict_to_custom_node,
 )
 from app.models import CustomNode, MappingEntry
 from app.state import AppState
@@ -324,20 +323,6 @@ class MainWindow(QMainWindow):
         self.state.current_canvas_file = file_path
         self.state.has_unsaved_changes = False
 
-        for data in payload.get("custom_nodes", []):
-            mapping = [MappingEntry(dbc_value=m["dbc_value"], radar_value=m["radar_value"]) for m in data.get("mapping_table", [])]
-            node = CustomNode(
-                id=data.get("id", ""),
-                name=data.get("name", ""),
-                target_variable=data.get("target_variable", ""),
-                description=data.get("description", ""),
-                source_message=data.get("source_message", ""),
-                source_signal=data.get("source_signal", ""),
-                mapping_table=mapping,
-            )
-            self.state.custom_nodes.append(node)
-            self.dbc_tree.add_custom_node(node)
-
         for data in payload.get("links", []):
             source_id = data.get("source_id", "")
             target_id = data.get("target_id", "")
@@ -367,17 +352,6 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            custom_nodes_export = []
-            for node in self.state.custom_nodes:
-                custom_nodes_export.append(canvas_dict_to_custom_node({
-                    "id": node.id,
-                    "signal": node.name,
-                    "target_variable": node.target_variable,
-                    "description": node.description,
-                    "source_message": node.source_message,
-                    "source_signal": node.source_signal,
-                    "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
-                }))
             export_canvas_json(
                 file_path=file_path,
                 dbc_file=(
@@ -386,7 +360,6 @@ class MainWindow(QMainWindow):
                     else None
                 ),
                 nodes=self.node_canvas.export_nodes(),
-                custom_nodes=custom_nodes_export if custom_nodes_export else None,
                 links=self.node_canvas.export_links() or None,
             )
         except Exception as exc:
