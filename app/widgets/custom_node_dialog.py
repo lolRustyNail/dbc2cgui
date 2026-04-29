@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -13,11 +12,9 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
-    QWidget,
 )
 
 from app.models import CustomNode, MappingEntry
@@ -35,16 +32,10 @@ class CustomNodeDialog(QDialog):
 
         self.setWindowTitle("Create Custom Mapping Node" if current_node is None else "Edit Custom Mapping Node")
         self.setModal(True)
-        self.resize(520, 420)
+        self.resize(520, 360)
 
         self._name_edit = QLineEdit()
-        self._target_var_edit = QLineEdit()
         self._desc_edit = QLineEdit()
-        self._length_spin = QSpinBox()
-        self._length_spin.setRange(1, 64)
-        self._length_spin.setValue(8)
-        self._byte_order_combo = QComboBox()
-        self._byte_order_combo.addItems(["Big Endian", "Little Endian"])
         self._mapping_table = QTableWidget()
         self._mapping_table.setColumnCount(3)
         self._mapping_table.setHorizontalHeaderLabels(["DBC Value", "Radar Value", ""])
@@ -80,10 +71,7 @@ class CustomNodeDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("Name", self._name_edit)
-        form.addRow("Target Variable", self._target_var_edit)
         form.addRow("Description", self._desc_edit)
-        form.addRow("Signal Length", self._length_spin)
-        form.addRow("Byte Order", self._byte_order_combo)
 
         mapping_layout = QVBoxLayout()
         mapping_layout.addWidget(QLabel("Mapping Table (DBC Value → Radar Value)"))
@@ -111,14 +99,7 @@ class CustomNodeDialog(QDialog):
 
     def _load_node(self, node: CustomNode) -> None:
         self._name_edit.setText(node.name)
-        self._target_var_edit.setText(node.target_variable)
         self._desc_edit.setText(node.description)
-        self._length_spin.setValue(node.length)
-        index = self._byte_order_combo.findText(
-            "Big Endian" if node.byte_order == "big_endian" else "Little Endian"
-        )
-        if index >= 0:
-            self._byte_order_combo.setCurrentIndex(index)
         for entry in node.mapping_table:
             self._add_mapping_row(entry.dbc_value, entry.radar_value)
 
@@ -127,13 +108,6 @@ class CustomNodeDialog(QDialog):
         if not name:
             QMessageBox.warning(self, "Missing Name", "Enter a name for the custom node.")
             return
-
-        target_var = self._target_var_edit.text().strip()
-        if not target_var:
-            QMessageBox.warning(self, "Missing Variable", "Enter a target variable name.")
-            return
-
-        byte_order = "big_endian" if self._byte_order_combo.currentText() == "Big Endian" else "little_endian"
 
         mapping_table: list[MappingEntry] = []
         for row in range(self._mapping_table.rowCount()):
@@ -152,14 +126,14 @@ class CustomNodeDialog(QDialog):
         self._result_node = CustomNode(
             id=node_id,
             name=name,
-            target_variable=target_var,
+            target_variable=name,
             description=self._desc_edit.text().strip(),
             source_message=source_message,
             source_signal=source_signal,
             mapping_table=mapping_table,
             frame_id=self._current_node.frame_id if self._current_node else 0,
             start_bit=self._current_node.start_bit if self._current_node else 0,
-            length=self._length_spin.value(),
-            byte_order=byte_order,
+            length=self._current_node.length if self._current_node else 8,
+            byte_order=self._current_node.byte_order if self._current_node else "big_endian",
         )
         self.accept()
