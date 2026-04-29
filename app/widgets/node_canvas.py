@@ -529,13 +529,25 @@ class NodeCanvasView(QGraphicsView):
         self.fit_all_nodes()
 
     def delete_selected_items(self) -> None:
-        selected_links = [
+        selected_condition_links = [
             item for item in self._scene.selectedItems() if isinstance(item, ConditionLinkItem)
         ]
-        if selected_links:
+        if selected_condition_links:
             with self._batch_history():
-                for link in selected_links:
+                for link in selected_condition_links:
                     self._hide_condition_dependency(link.target_item)
+            self.content_changed.emit()
+            return
+
+        selected_link_items = [
+            item for item in self._scene.selectedItems() if isinstance(item, LinkItem)
+        ]
+        if selected_link_items:
+            with self._batch_history():
+                for link in selected_link_items:
+                    self._scene.removeItem(link)
+                    if link in self._links:
+                        self._links.remove(link)
             self.content_changed.emit()
             return
 
