@@ -282,7 +282,7 @@ class MainWindow(QMainWindow):
             return
 
         self.state.current_document = document
-        self.dbc_tree.load_document(document)
+        self.dbc_tree.load_document(document, self.state.custom_nodes)
         self.node_canvas.set_available_condition_sources(
             self._collect_condition_sources_from_document(document)
         )
@@ -738,7 +738,7 @@ class MainWindow(QMainWindow):
         """Load a DBC file without dialog or status message (for auto-restore)."""
         document = load_dbc_document(file_path)
         self.state.current_document = document
-        self.dbc_tree.load_document(document)
+        self.dbc_tree.load_document(document, self.state.custom_nodes)
         self.node_canvas.set_available_condition_sources(
             self._collect_condition_sources_from_document(document)
         )

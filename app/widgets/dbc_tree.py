@@ -115,7 +115,7 @@ class DbcTreeWidget(QTreeWidget):
     def filter_text(self) -> str:
         return self._filter_text
 
-    def load_document(self, document: DbcDocument) -> None:
+    def load_document(self, document: DbcDocument, custom_nodes: list[CustomNode] | None = None) -> None:
         self.clear()
         root_item = QTreeWidgetItem([Path(document.file_path).name])
         root_item.setData(0, self.ROLE_KIND, "document")
@@ -133,6 +133,10 @@ class DbcTreeWidget(QTreeWidget):
         self.addTopLevelItem(self._custom_root)
         self._custom_root.setExpanded(True)
 
+        if custom_nodes:
+            for cn in custom_nodes:
+                self.add_custom_node(cn)
+
         self.apply_filter(self._filter_text)
 
     def apply_filter(self, text: str) -> None:
@@ -143,6 +147,14 @@ class DbcTreeWidget(QTreeWidget):
             self._apply_filter_to_item(item, self._filter_text)
 
     def _apply_filter_to_item(self, item: QTreeWidgetItem, filter_text: str) -> bool:
+        kind = item.data(0, self.ROLE_KIND)
+        if kind == "custom_root":
+            item.setHidden(False)
+            for index in range(item.childCount()):
+                child = item.child(index)
+                self._apply_filter_to_item(child, filter_text)
+            return True
+
         own_match = not filter_text or filter_text in item.text(0).lower()
         child_match = False
 
@@ -155,7 +167,7 @@ class DbcTreeWidget(QTreeWidget):
 
         if filter_text and child_match:
             item.setExpanded(True)
-        elif not filter_text and item.data(0, self.ROLE_KIND) in {"document", "node"}:
+        elif not filter_text and kind in {"document", "node"}:
             item.setExpanded(True)
 
         return should_show
