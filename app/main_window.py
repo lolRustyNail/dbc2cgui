@@ -520,6 +520,7 @@ class MainWindow(QMainWindow):
                 "source_message": node.source_message,
                 "source_signal": node.source_signal,
                 "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+                "default_value": node.default_value,
             })
         return {
             "version": 2,
@@ -594,6 +595,7 @@ class MainWindow(QMainWindow):
                     source_message=data.get("source_message", ""),
                     source_signal=data.get("source_signal", ""),
                     mapping_table=mapping,
+                    default_value=data.get("default_value", ""),
                 )
                 self.state.custom_nodes.append(node)
                 self.dbc_tree.add_custom_node(node)
@@ -624,6 +626,7 @@ class MainWindow(QMainWindow):
                     "source_message": node.source_message,
                     "source_signal": node.source_signal,
                     "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+                    "default_value": node.default_value,
                 })
             export_custom_nodes_json(file_path, nodes_data)
             self.statusBar().showMessage(f"Exported {len(self.state.custom_nodes)} custom nodes.")
@@ -807,6 +810,7 @@ class MainWindow(QMainWindow):
                         source_message=data.get("source_message", ""),
                         source_signal=data.get("source_signal", ""),
                         mapping_table=mapping,
+                        default_value=data.get("default_value", ""),
                     )
                     self.state.custom_nodes.append(node)
                 self.dbc_tree.load_custom_nodes(self.state.custom_nodes)
@@ -854,6 +858,7 @@ class MainWindow(QMainWindow):
                 "source_message": node.source_message,
                 "source_signal": node.source_signal,
                 "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+                "default_value": node.default_value,
             })
         self._settings.setValue("custom_nodes", json.dumps(custom_nodes_data))
         links_data = self.node_canvas.export_links()

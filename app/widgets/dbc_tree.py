@@ -251,6 +251,7 @@ class DbcTreeWidget(QTreeWidget):
             "source_message": node.source_message,
             "source_signal": node.source_signal,
             "mapping_table": [{"dbc_value": m.dbc_value, "radar_value": m.radar_value} for m in node.mapping_table],
+            "default_value": node.default_value,
         }
 
     def _handle_item_activation(self, item: QTreeWidgetItem, column: int) -> None:

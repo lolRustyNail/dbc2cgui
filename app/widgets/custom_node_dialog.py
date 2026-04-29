@@ -36,6 +36,8 @@ class CustomNodeDialog(QDialog):
 
         self._name_edit = QLineEdit()
         self._desc_edit = QLineEdit()
+        self._default_value_edit = QLineEdit()
+        self._default_value_edit.setPlaceholderText("Value when DBC value not in mapping table")
         self._mapping_table = QTableWidget()
         self._mapping_table.setColumnCount(3)
         self._mapping_table.setHorizontalHeaderLabels(["DBC Value", "Radar Value", ""])
@@ -72,6 +74,7 @@ class CustomNodeDialog(QDialog):
         form = QFormLayout()
         form.addRow("Name", self._name_edit)
         form.addRow("Description", self._desc_edit)
+        form.addRow("Default Value", self._default_value_edit)
 
         mapping_layout = QVBoxLayout()
         mapping_layout.addWidget(QLabel("Mapping Table (DBC Value → Radar Value)"))
@@ -100,6 +103,7 @@ class CustomNodeDialog(QDialog):
     def _load_node(self, node: CustomNode) -> None:
         self._name_edit.setText(node.name)
         self._desc_edit.setText(node.description)
+        self._default_value_edit.setText(node.default_value)
         for entry in node.mapping_table:
             self._add_mapping_row(entry.dbc_value, entry.radar_value)
 
@@ -131,5 +135,6 @@ class CustomNodeDialog(QDialog):
             source_message=source_message,
             source_signal=source_signal,
             mapping_table=mapping_table,
+            default_value=self._default_value_edit.text().strip(),
         )
         self.accept()

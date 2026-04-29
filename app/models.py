@@ -26,6 +26,7 @@ class CustomNode:
     source_message: str = ""
     source_signal: str = ""
     mapping_table: list[MappingEntry] = field(default_factory=list)
+    default_value: str = ""
 
 
 @dataclass(slots=True)

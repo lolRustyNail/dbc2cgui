@@ -56,12 +56,15 @@ class SignalNodeItem(QGraphicsRectItem):
             detail_lines = [
                 f"Source: {source_text}",
             ]
+            default_val = self.signal_data.get("default_value", "")
             mappings = self.signal_data.get("mapping_table", [])
             if mappings:
                 summary = ", ".join(f"{m['dbc_value']}→{m['radar_value']}" for m in mappings[:3])
                 if len(mappings) > 3:
                     summary += f" (+{len(mappings)-3} more)"
                 detail_lines.append(f"Mapping: {summary}")
+            if default_val:
+                detail_lines.append(f"Default: {default_val}")
         else:
             detail_lines = [
                 f"Message: {self.signal_data.get('message', '')}",
@@ -165,6 +168,9 @@ class SignalNodeItem(QGraphicsRectItem):
                 lines.extend(["", "Mapping Table:"])
                 for m in mappings:
                     lines.append(f"  {m['dbc_value']} → {m['radar_value']}")
+            default_val = self.signal_data.get("default_value", "")
+            if default_val:
+                lines.extend(["", f"Default Value: {default_val}"])
             condition = self.signal_data.get("condition")
             if condition:
                 lines.extend([
