@@ -302,16 +302,35 @@ class SignalNodeItem(QGraphicsRectItem):
         return round(value / cls.GRID_SIZE) * cls.GRID_SIZE
 
     def to_node_payload(self, include_id: bool = True) -> dict:
-        payload = {
-            "node": self.signal_data["node"],
-            "direction": self.signal_data["direction"],
-            "message": self.signal_data["message"],
-            "frame_id": self.signal_data["frame_id"],
-            "signal": self.signal_data["signal"],
-            "start_bit": self.signal_data["start_bit"],
-            "length": self.signal_data["length"],
-            "byte_order": self.signal_data.get("byte_order", "big_endian"),
-        }
+        is_custom = self.signal_data.get("type") == "custom"
+        if is_custom:
+            payload = {
+                "type": "custom",
+                "node": self.signal_data.get("node", "CUSTOM"),
+                "direction": self.signal_data.get("direction", "custom"),
+                "message": self.signal_data.get("message", ""),
+                "frame_id": self.signal_data.get("frame_id", 0),
+                "signal": self.signal_data.get("signal", ""),
+                "start_bit": self.signal_data.get("start_bit", 0),
+                "length": self.signal_data.get("length", 0),
+                "byte_order": self.signal_data.get("byte_order", "big_endian"),
+                "target_variable": self.signal_data.get("target_variable", ""),
+                "description": self.signal_data.get("description", ""),
+                "source_message": self.signal_data.get("source_message", ""),
+                "source_signal": self.signal_data.get("source_signal", ""),
+                "mapping_table": self.signal_data.get("mapping_table", []),
+            }
+        else:
+            payload = {
+                "node": self.signal_data["node"],
+                "direction": self.signal_data["direction"],
+                "message": self.signal_data["message"],
+                "frame_id": self.signal_data["frame_id"],
+                "signal": self.signal_data["signal"],
+                "start_bit": self.signal_data["start_bit"],
+                "length": self.signal_data["length"],
+                "byte_order": self.signal_data.get("byte_order", "big_endian"),
+            }
         if include_id:
             payload["id"] = self.node_id
         if self.has_condition():
