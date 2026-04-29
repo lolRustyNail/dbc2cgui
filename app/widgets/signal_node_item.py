@@ -225,7 +225,7 @@ class SignalNodeItem(QGraphicsRectItem):
         painter.drawRoundedRect(QRectF(1, 1, self.WIDTH - 2, 34), 10, 10)
         painter.drawRect(QRectF(1, 18, self.WIDTH - 2, 16))
 
-        badge_rect = QRectF(self.WIDTH - 58, 10, 42, 20)
+        badge_rect = QRectF(self.WIDTH - 74, 10, 58, 20)
         painter.setBrush(QBrush(badge_fill))
         painter.drawRoundedRect(badge_rect, 10, 10)
 
