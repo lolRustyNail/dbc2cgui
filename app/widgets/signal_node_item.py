@@ -377,6 +377,7 @@ class SignalNodeItem(QGraphicsRectItem):
             export_data["source_message"] = self.signal_data.get("source_message", "")
             export_data["source_signal"] = self.signal_data.get("source_signal", "")
             export_data["mapping_table"] = self.signal_data.get("mapping_table", [])
+            export_data["default_value"] = self.signal_data.get("default_value", "")
         if self.has_condition():
             cond = dict(self.signal_data["condition"])
             cond["shown"] = self._is_condition_shown()
