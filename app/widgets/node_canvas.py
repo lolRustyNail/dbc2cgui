@@ -223,6 +223,7 @@ class NodeCanvasView(QGraphicsView):
     def clear_canvas(self) -> None:
         self._scene.clear()
         self._condition_links.clear()
+        self._links.clear()
 
     def export_nodes(self) -> list[dict]:
         nodes = [
