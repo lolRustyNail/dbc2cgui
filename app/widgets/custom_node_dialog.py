@@ -5,6 +5,7 @@ import uuid
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -50,6 +51,7 @@ class CustomNodeDialog(QDialog):
         self._mapping_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._mapping_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self._mapping_table.verticalHeader().setVisible(False)
+        self._mapping_table.cellDoubleClicked.connect(self._on_cell_double_clicked)
 
         self._build_form()
         if current_node is not None:
@@ -128,6 +130,29 @@ class CustomNodeDialog(QDialog):
     def _delete_mapping_row(self, row: int) -> None:
         if 0 <= row < self._mapping_table.rowCount():
             self._mapping_table.removeRow(row)
+
+    def _on_cell_double_clicked(self, row: int, column: int) -> None:
+        if not self._is_edit_mode:
+            return
+        if column not in (1, 2):
+            return
+        item = self._mapping_table.item(row, column)
+        if item is None:
+            return
+        if item.flags() & Qt.ItemFlag.ItemIsEditable:
+            return
+
+        col_name = "Radar Value" if column == 1 else "Alias"
+        reply = QMessageBox.question(
+            self,
+            "Unlock Field",
+            f"Unlock {col_name} for editing?\n\nThis changes the mapping definition.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+            item.setBackground(QColor("#fffde7"))
 
     def _load_node(self, node: CustomNode) -> None:
         self._name_edit.setText(node.name)
